@@ -11,7 +11,7 @@
   resize();
   window.addEventListener("resize", resize);
 
-  const ACCENT = "74, 222, 128";
+  const ACCENT = "76, 92, 45";
 
   const lenses = Array.from({ length: 22 }, () => ({
     x:     Math.random() * window.innerWidth,

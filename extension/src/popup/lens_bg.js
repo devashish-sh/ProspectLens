@@ -13,7 +13,7 @@
   }
   resize();
 
-  const ACCENT = "74, 222, 128"; // RGB of #4ade80
+  const ACCENT = "76, 92, 45"; // RGB of #4C5C2D
 
   // Generate lenses
   const lenses = Array.from({ length: 14 }, () => ({
