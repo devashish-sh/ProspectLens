@@ -1,5 +1,9 @@
 backend/venv/
 backend/.env
+backend/prospectlens.db
+backend/assets/exports/
 extension/node_modules/
 extension/dist/
 *.db
+__pycache__/
+*.pyc

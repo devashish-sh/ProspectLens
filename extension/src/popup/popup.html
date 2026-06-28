@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ProspectLens</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <!-- Animated lens background -->
+  <canvas id="lens-canvas"></canvas>
+
+  <!-- ================================================================
+    HEADER
+  ================================================================ -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <circle cx="8" cy="8" r="6" stroke="#4ade80" stroke-width="1.5"/>
+          <circle cx="8" cy="8" r="3" stroke="#4ade80" stroke-width="1" opacity="0.5"/>
+          <line x1="13" y1="13" x2="18" y2="18" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <span class="logo-text">ProspectLens</span>
+      </div>
+      <span class="version">v1.0</span>
+    </div>
+    <div id="backend-status" class="status-badge status-checking">
+      <span class="status-dot"></span>
+      <span class="status-text">Checking</span>
+    </div>
+  </header>
+
+  <!-- ================================================================
+    PAGE DETECTION BANNER
+  ================================================================ -->
+  <div id="page-banner" class="page-banner hidden">
+    <span id="page-icon" class="page-icon"></span>
+    <span id="page-name" class="page-name"></span>
+    <span class="page-ready">Ready</span>
+  </div>
+
+  <div id="unsupported-banner" class="unsupported-banner hidden">
+    Open IndiaMART, Google Maps, or Justdial to collect
+  </div>
+
+  <!-- ================================================================
+    STATS
+  ================================================================ -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-number" id="stat-total">—</div>
+      <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="stat-today">—</div>
+      <div class="stat-label">Today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="stat-new">—</div>
+      <div class="stat-label">New</div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+    COLLECTION PANEL
+  ================================================================ -->
+  <div id="collection-panel" class="collection-panel hidden">
+
+    <div class="mode-selector">
+      <button class="mode-btn active" id="mode-quick" data-mode="quick">
+        <span class="mode-icon">⚡</span> Quick
+      </button>
+      <button class="mode-btn" id="mode-deep" data-mode="deep">
+        <span class="mode-icon">🔍</span> Deep
+      </button>
+    </div>
+
+    <p class="mode-desc" id="mode-desc">Collects visible listings on current page. Fast, no navigation.</p>
+
+    <button class="collect-btn" id="collect-btn">
+      <span class="collect-btn-text">Start Collection</span>
+    </button>
+
+    <div class="progress-wrap hidden" id="progress-container">
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-text" id="progress-text">Starting...</div>
+    </div>
+
+  </div>
+
+  <!-- ================================================================
+    RECENT COLLECTIONS
+  ================================================================ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Recent</span>
+      <button class="link-btn" id="open-dashboard">View All →</button>
+    </div>
+    <div id="recent-batches" class="recent-list">
+      <div class="empty-msg">No collections yet</div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+    FOOTER
+  ================================================================ -->
+  <div class="footer">
+    <button class="footer-btn" id="btn-export">↓ Export</button>
+    <button class="footer-btn" id="btn-settings">⚙ Settings</button>
+  </div>
+
+  <script src="popup.js"></script>
+  <script src="lens-bg.js"></script>
+</body>
+</html>

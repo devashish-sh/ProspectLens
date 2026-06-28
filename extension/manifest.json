@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "ProspectLens",
+  "version": "1.0.0",
+  "description": "Automated B2B lead collection from IndiaMART, Google Maps, and Justdial",
+
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "notifications"
+  ],
+
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "https://www.indiamart.com/*",
+    "https://dir.indiamart.com/*",
+    "https://www.google.com/maps/*",
+    "https://maps.google.com/*",
+    "https://www.justdial.com/*"
+  ],
+
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "ProspectLens",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.indiamart.com/*",
+        "https://dir.indiamart.com/*"
+      ],
+      "js": ["src/content-scripts/collector.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.google.com/maps/*",
+        "https://maps.google.com/*"
+      ],
+      "js": ["src/content-scripts/collector.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.justdial.com/*"
+      ],
+      "js": ["src/content-scripts/collector.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "icons": {
+    "16":  "icons/icon16.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

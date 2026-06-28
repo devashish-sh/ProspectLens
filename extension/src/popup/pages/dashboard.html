@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ProspectLens — Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+
+  <canvas id="lens-canvas"></canvas>
+
+  <!-- ================================================================
+    SIDEBAR
+  ================================================================ -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+        <circle cx="8" cy="8" r="6" stroke="#4ade80" stroke-width="1.5"/>
+        <circle cx="8" cy="8" r="3" stroke="#4ade80" stroke-width="1" opacity="0.5"/>
+        <line x1="13" y1="13" x2="18" y2="18" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-name">ProspectLens</span>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-link active" id="nav-leads">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor" opacity="0.7"/><rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor" opacity="0.5"/><rect x="1" y="11" width="10" height="2" rx="1" fill="currentColor" opacity="0.3"/></svg>
+        Leads
+      </a>
+      <a class="nav-link" id="nav-batches">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5" opacity="0.7"/><path d="M5 8h6M5 11h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/></svg>
+        Collections
+      </a>
+      <a class="nav-link" id="nav-export">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/><path d="M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/></svg>
+        Export
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div id="dash-backend-status" class="backend-pill checking">
+        <span class="pill-dot"></span>
+        <span class="dash-status-text">Checking...</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================================================================
+    MAIN
+  ================================================================ -->
+  <main class="main">
+
+    <div class="topbar">
+      <div>
+        <h1 class="page-title" id="page-title">All Leads</h1>
+        <p class="page-sub" id="page-subtitle">Loading...</p>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" id="btn-export-csv">CSV</button>
+        <button class="btn btn-primary" id="btn-export-xlsx">↓ Export XLSX</button>
+      </div>
+    </div>
+
+    <!-- STAT CARDS -->
+    <div class="cards" id="stat-cards">
+      <div class="card"><div class="card-num" id="dash-total">—</div><div class="card-lbl">Total</div></div>
+      <div class="card"><div class="card-num" id="dash-new">—</div><div class="card-lbl">New</div></div>
+      <div class="card"><div class="card-num" id="dash-contacted">—</div><div class="card-lbl">Contacted</div></div>
+      <div class="card"><div class="card-num" id="dash-qualified">—</div><div class="card-lbl">Qualified</div></div>
+      <div class="card"><div class="card-num" id="dash-indiamart">—</div><div class="card-lbl">IndiaMART</div></div>
+      <div class="card"><div class="card-num" id="dash-googlemaps">—</div><div class="card-lbl">G Maps</div></div>
+      <div class="card"><div class="card-num" id="dash-justdial">—</div><div class="card-lbl">Justdial</div></div>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="filters" id="filters-bar">
+      <input class="f-input" id="filter-search" type="text" placeholder="Search business..." />
+      <select class="f-select" id="filter-source">
+        <option value="">All Sources</option>
+        <option value="indiamart">IndiaMART</option>
+        <option value="googlemaps">Google Maps</option>
+        <option value="justdial">Justdial</option>
+      </select>
+      <select class="f-select" id="filter-status">
+        <option value="">All Status</option>
+        <option value="new">New</option>
+        <option value="contacted">Contacted</option>
+        <option value="qualified">Qualified</option>
+        <option value="closed">Closed</option>
+      </select>
+      <select class="f-select" id="filter-city"><option value="">All Cities</option></select>
+      <button class="btn btn-ghost" id="btn-clear-filters">✕</button>
+    </div>
+
+    <!-- LEADS TABLE -->
+    <div class="tbl-wrap" id="leads-section">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="select-all" /></th>
+            <th>Business</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>City</th>
+            <th>Source</th>
+            <th>Status</th>
+            <th>Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="leads-tbody">
+          <tr><td colspan="9" class="tbl-empty">Loading leads...</td></tr>
+        </tbody>
+      </table>
+      <div class="pager" id="pagination">
+        <button class="pager-btn" id="btn-prev">← Prev</button>
+        <span class="pager-info" id="page-info">Page 1</span>
+        <button class="pager-btn" id="btn-next">Next →</button>
+      </div>
+    </div>
+
+    <!-- COLLECTIONS TABLE -->
+    <div class="tbl-wrap hidden" id="batches-section">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Collection Name</th>
+            <th>Source</th>
+            <th>Mode</th>
+            <th>Leads Saved</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody id="batches-tbody">
+          <tr><td colspan="5" class="tbl-empty">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- EXPORT PANEL -->
+    <div class="export-panel hidden" id="export-section">
+      <h2 class="export-h">Export Leads</h2>
+      <div class="export-cards">
+        <div class="export-card">
+          <div class="export-icon">📊</div>
+          <div class="export-name">Excel XLSX</div>
+          <div class="export-desc">Open in Microsoft Excel with formatted headers</div>
+          <button class="btn btn-primary export-btn" data-format="xlsx">Download XLSX</button>
+        </div>
+        <div class="export-card">
+          <div class="export-icon">📄</div>
+          <div class="export-name">CSV</div>
+          <div class="export-desc">Import into any CRM or spreadsheet tool</div>
+          <button class="btn btn-ghost export-btn" data-format="csv">Download CSV</button>
+        </div>
+      </div>
+      <div class="export-hist">
+        <p class="hist-title">Export History</p>
+        <div id="export-history-list">Loading...</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================================================================
+    LEAD MODAL
+  ================================================================ -->
+  <div class="overlay hidden" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-hd">
+        <h2 class="modal-title" id="modal-business-name"></h2>
+        <button class="modal-x" id="modal-close">✕</button>
+      </div>
+      <div class="modal-bd" id="modal-body">Loading...</div>
+    </div>
+  </div>
+
+  <script src="dashboard.js"></script>
+  <script src="../lens-bg-dash.js"></script>
+</body>
+</html>
