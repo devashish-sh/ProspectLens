@@ -102,21 +102,7 @@ body {
   margin-bottom: 16px;
 }
 
-.sidebar-brand svg {
-  filter: drop-shadow(0 0 6px rgba(76, 92, 45, 0.25));
-}
-
-.brand-name {
-  font-size: 15px;
-  font-weight: 850;
-  color: var(--text);
-  letter-spacing: -0.5px;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3), 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
-.logo-highlight {
-  color: var(--accent);
-}
+/* Inline Animated Logo is fully styled inside HTML SVG defs */
 
 .nav {
   display: flex;

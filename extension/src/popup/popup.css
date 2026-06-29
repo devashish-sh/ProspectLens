@@ -83,34 +83,7 @@ body {
   gap: 8px;
 }
 
-.logo svg {
-  filter: drop-shadow(0 0 4px rgba(76, 92, 45, 0.2));
-}
-
-.logo-brand {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-}
-
-.logo-text {
-  font-size: 13.5px;
-  font-weight: 850;
-  color: #ffffff;
-  letter-spacing: -0.4px;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3), 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
-.logo-highlight {
-  color: var(--accent);
-}
-
-.logo-sub {
-  font-size: 8px;
-  font-weight: 800;
-  color: var(--text-dark);
-  letter-spacing: 0.5px;
-}
+/* Inline Animated Logo is fully styled inside HTML SVG defs */
 
 /* Status badge (Engine On dropdown) */
 .status-badge {
