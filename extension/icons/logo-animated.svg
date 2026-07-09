@@ -14,7 +14,7 @@
       .logo:hover .logo-icon,
       .sidebar-brand:hover .logo-icon {
         transform: scale(1.03);
-        filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.3)) drop-shadow(0 0 18px rgba(74, 222, 128, 0.25));
+        filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.3)) drop-shadow(0 0 18px rgba(118, 165, 68, 0.25));
       }
       .logo-handle {
         transform-origin: 19.8px 19.8px;
@@ -52,8 +52,8 @@
       svg:hover .logo-text-lens,
       .logo:hover .logo-text-lens,
       .sidebar-brand:hover .logo-text-lens {
-        fill: #5eff99;
-        filter: drop-shadow(0 0 8px rgba(74, 222, 128, 0.45)) drop-shadow(0 0 16px rgba(74, 222, 128, 0.2));
+        fill: #76A544;
+        filter: drop-shadow(0 0 8px rgba(118, 165, 68, 0.45)) drop-shadow(0 0 16px rgba(118, 165, 68, 0.2));
       }
       
       .radar-ping {
@@ -113,37 +113,37 @@
   <!-- 1. Logo Icon Group -->
   <g class="logo-icon">
     <!-- Sonar Scan Wave Ripple (Radar Ping) -->
-    <circle class="radar-ping" cx="14.5" cy="12.5" r="7.5" stroke="#4ade80" stroke-width="1.2"/>
+    <circle class="radar-ping" cx="14.5" cy="12.5" r="7.5" stroke="#76A544" stroke-width="1.2"/>
 
     <!-- Inner Lens Sweeper Group -->
     <g class="lens-sweeper">
-      <circle cx="14.5" cy="12.5" r="7.5" stroke="#4ade80" stroke-width="1.8" class="radar-line"/>
-      <circle cx="14.5" cy="12.5" r="5" stroke="#4ade80" stroke-width="0.8" stroke-dasharray="2 1.5" opacity="0.75" class="radar-line"/>
-      <circle cx="14.5" cy="12.5" r="2.5" stroke="#4ade80" stroke-width="0.8" opacity="0.5" class="radar-line"/>
-      <circle cx="14.5" cy="12.5" r="1.2" fill="#4ade80"/>
+      <circle cx="14.5" cy="12.5" r="7.5" stroke="#76A544" stroke-width="1.8" class="radar-line"/>
+      <circle cx="14.5" cy="12.5" r="5" stroke="#76A544" stroke-width="0.8" stroke-dasharray="2 1.5" opacity="0.75" class="radar-line"/>
+      <circle cx="14.5" cy="12.5" r="2.5" stroke="#76A544" stroke-width="0.8" opacity="0.5" class="radar-line"/>
+      <circle cx="14.5" cy="12.5" r="1.2" fill="#76A544"/>
       <!-- Sweep hand pointing to 2 o'clock -->
-      <line x1="14.5" y1="12.5" x2="20" y2="9" stroke="#4ade80" stroke-width="1.3"/>
-      <circle cx="18.7" cy="9.8" r="0.9" fill="#4ade80"/>
+      <line x1="14.5" y1="12.5" x2="20" y2="9" stroke="#76A544" stroke-width="1.3"/>
+      <circle cx="18.7" cy="9.8" r="0.9" fill="#76A544"/>
     </g>
     
     <!-- Muted Radar Target Lock Blips -->
-    <circle class="target-blip-1" cx="10" cy="8.5" r="0.8" fill="#4ade80"/>
-    <circle class="target-blip-2" cx="18" cy="16.5" r="0.8" fill="#4ade80"/>
+    <circle class="target-blip-1" cx="10" cy="8.5" r="0.8" fill="#76A544"/>
+    <circle class="target-blip-2" cx="18" cy="16.5" r="0.8" fill="#76A544"/>
     
     <!-- White letter 'P' shape outer contour -->
-    <path d="M7 12.5v15" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
-    <path d="M14.5 5H16a7.5 7.5 0 0 1 7.5 7.5v0a7.5 7.5 0 0 1-7.5 7.5H7" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M7 12.5v15" stroke="#E3E4E3" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M14.5 5H16a7.5 7.5 0 0 1 7.5 7.5v0a7.5 7.5 0 0 1-7.5 7.5H7" stroke="#E3E4E3" stroke-width="2.5" stroke-linecap="round"/>
     
     <!-- Magnifying glass green handle -->
-    <line class="logo-handle" x1="19.8" y1="19.8" x2="26" y2="26" stroke="#4ade80" stroke-width="3.5" stroke-linecap="round"/>
+    <line class="logo-handle" x1="19.8" y1="19.8" x2="26" y2="26" stroke="#76A544" stroke-width="3.5" stroke-linecap="round"/>
   </g>
 
   <!-- 2. Logo Brand Typography -->
   <g>
-    <text x="38" y="21.5" font-family="Quicksand, system-ui, -apple-system, sans-serif" font-weight="700" font-size="15.5" fill="#ffffff" letter-spacing="-0.3">
-      <tspan class="logo-text-prospect" fill="#ffffff">Prospect</tspan><tspan class="logo-text-lens" fill="#4ade80">Lens</tspan>
+    <text x="38" y="21.5" font-family="Manrope, system-ui, -apple-system, sans-serif" font-weight="700" font-size="15.5" fill="#E3E4E3" letter-spacing="-0.3">
+      <tspan class="logo-text-prospect" fill="#E3E4E3">Prospect</tspan><tspan class="logo-text-lens" fill="#76A544">Lens</tspan>
     </text>
-    <text x="38" y="30.5" font-family="Quicksand, system-ui, -apple-system, sans-serif" font-weight="800" font-size="5.2" fill="#9ca3af" letter-spacing="1">
+    <text x="38" y="30.5" font-family="Manrope, system-ui, -apple-system, sans-serif" font-weight="800" font-size="5.2" fill="#606060" letter-spacing="1">
       LEAD INTELLIGENCE PLATFORM
     </text>
   </g>

@@ -37,11 +37,47 @@ function detectSite(url) {
 }
 
 // ============================================================
+// ============================================================
 // BACKEND STATUS CHECK
 // ============================================================
+function updateButtonUI(isDisconnected) {
+  const reconnectBtn = document.getElementById("btn-reconnect-backend");
+  if (!reconnectBtn) return;
+  const labelSpan = reconnectBtn.querySelector("span");
+  const svgEl = reconnectBtn.querySelector("svg");
+
+  if (isDisconnected) {
+    reconnectBtn.classList.remove("btn-disconnect");
+    if (labelSpan) labelSpan.textContent = "Connect Backend";
+    if (svgEl) {
+      svgEl.innerHTML = '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />';
+    }
+  } else {
+    reconnectBtn.classList.add("btn-disconnect");
+    if (labelSpan) labelSpan.textContent = "Disconnect Backend";
+    if (svgEl) {
+      svgEl.innerHTML = '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>';
+    }
+  }
+}
+
 async function checkBackendStatus() {
   const badge    = document.getElementById("backend-status");
   const dotText  = badge.querySelector(".status-text");
+
+  // Check persistent disconnected state
+  let isDisconnected = false;
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    const store = await chrome.storage.local.get("disconnected");
+    isDisconnected = !!store.disconnected;
+  }
+
+  if (isDisconnected) {
+    badge.className    = "status-badge status-offline";
+    dotText.textContent = "Disconnected";
+    updateButtonUI(true);
+    return false;
+  }
 
   try {
     const res  = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
@@ -50,6 +86,7 @@ async function checkBackendStatus() {
     if (data.status === "ok") {
       badge.className    = "status-badge status-online";
       dotText.textContent = "Connected";
+      updateButtonUI(false);
       return true;
     } else {
       throw new Error("degraded");
@@ -57,9 +94,12 @@ async function checkBackendStatus() {
   } catch {
     badge.className    = "status-badge status-offline";
     dotText.textContent = "Offline";
+    updateButtonUI(true);
     return false;
   }
 }
+
+window.checkBackendStatus = checkBackendStatus;
 
 // ============================================================
 // LOAD STATS FROM BACKEND
@@ -90,25 +130,51 @@ async function loadStats() {
 // ============================================================
 // LOAD RECENT BATCHES
 // ============================================================
+function formatActivityName(sourceSite, createdAtStr) {
+  const siteName = (sourceSite || "collection").toLowerCase().replace(/\s+/g, "");
+  if (!createdAtStr) return siteName;
+  const date = new Date(createdAtStr);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  hours = hours % 12;
+  hours = hours ? hours : 12; // the hour '0' should be '12'
+  
+  const timeStr = `${hours}:${minutes}${ampm}`;
+  return `${siteName}_${yyyy}-${mm}-${dd}_${timeStr}`;
+}
+
+function openBatchDashboard(batchId) {
+  chrome.tabs.create({ url: chrome.runtime.getURL(`src/popup/pages/dashboard.html?batch_id=${batchId}#leads`) });
+}
+window.openBatchDashboard = openBatchDashboard;
+
 async function loadRecentBatches() {
   const container = document.getElementById("recent-batches");
 
   try {
-    const res  = await fetch(`${API_BASE}/batches`);
+    const res  = await fetch(`${API_BASE}/batches?active_only=true`);
     const data = await res.json();
-    const batches = (data.batches || []).slice(0, 3);
+    const batches = (data.batches || []).slice(0, 5);
 
     if (batches.length === 0) {
-      container.innerHTML = '<div class="empty-state">No collections yet</div>';
+      container.innerHTML = '<div class="empty-state">No active storage capsules</div>';
       return;
     }
 
-    container.innerHTML = batches.map(b => `
-      <div class="batch-item">
-        <span class="batch-name">${b.batch_name || b.search_query || "Collection"}</span>
-        <span class="batch-count">${b.successful_records || 0} leads</span>
-      </div>
-    `).join("");
+    container.innerHTML = batches.map(b => {
+      const formattedName = formatActivityName(b.source_site, b.created_at);
+      return `
+        <div class="batch-item" style="cursor: pointer;" onclick="openBatchDashboard('${b.batch_id}')">
+          <span class="batch-name">${formattedName}</span>
+          <span class="batch-count">${b.successful_records || 0} leads</span>
+        </div>
+      `;
+    }).join("");
 
   } catch {
     container.innerHTML = '<div class="empty-state">Backend offline</div>';
@@ -207,7 +273,11 @@ async function startCollection(site) {
 
       if (msg.action === "COLLECTION_COMPLETE") {
         progressFill.style.width = "100%";
-        progressText.textContent = `✅ Done — ${msg.saved} leads saved, ${msg.duplicates} duplicates skipped`;
+        if (currentMode === "deep") {
+          progressText.textContent = "✅ Sweeper complete! Launching deep detail extractor in background...";
+        } else {
+          progressText.textContent = `✅ Done — ${msg.saved} leads saved, ${msg.duplicates} duplicates skipped`;
+        }
         chrome.runtime.onMessage.removeListener(progressListener);
 
         // Update batch record with final counts
@@ -220,6 +290,15 @@ async function startCollection(site) {
             failed_records:     msg.failed || 0
           })
         });
+
+        // If Deep Mode, trigger background Playwright worker
+        if (currentMode === "deep") {
+          fetch(`${API_BASE}/jobs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ batch_id: batchId, job_type: "deep_collect" })
+          });
+        }
 
         // Reload stats and batches after 1 second
         setTimeout(() => {
@@ -323,12 +402,48 @@ async function init() {
   document.getElementById("btn-settings").addEventListener("click", () => {
     alert("Settings coming in a future update.");
   });
+
+  // 9. Connect/Disconnect button click handler
+  const reconnectBtn = document.getElementById("btn-reconnect-backend");
+  if (reconnectBtn) {
+    reconnectBtn.addEventListener("click", async (e) => {
+      e.stopPropagation(); // prevent dropdown closing
+      
+      const store = await chrome.storage.local.get("disconnected");
+      const nextDisconnectedState = !store.disconnected;
+      
+      // Update persistent storage state
+      await chrome.storage.local.set({ disconnected: nextDisconnectedState });
+      
+      // Update UI to checking/offline transition state
+      const badge = document.getElementById("backend-status");
+      const dotText = badge.querySelector(".status-text");
+      if (!nextDisconnectedState) {
+        badge.className = "status-badge status-checking";
+        if (dotText) dotText.textContent = "Connecting...";
+      } else {
+        badge.className = "status-badge status-offline";
+        if (dotText) dotText.textContent = "Disconnecting...";
+      }
+      
+      // Trigger backend check
+      await checkBackendStatus();
+    });
+  }
+
+  // Helper to open dashboard with a hash
+  const openDashboard = (hash = "") => {
+    chrome.tabs.create({ url: chrome.runtime.getURL(`src/popup/pages/dashboard.html${hash}`) });
+  };
+
+  // View All button (recent activity section)
+  document.getElementById("open-dashboard").addEventListener("click", () => openDashboard());
+
+  // Bottom navigation tab bar items
+  document.getElementById("open-dashboard-leads").addEventListener("click", () => openDashboard("#leads"));
+  document.getElementById("open-dashboard-batches").addEventListener("click", () => openDashboard("#batches"));
+  document.getElementById("open-dashboard-extract").addEventListener("click", () => openDashboard("#jobs"));
 }
 
 // Run on popup open
 document.addEventListener("DOMContentLoaded", init);
-
-
-document.getElementById("open-dashboard").addEventListener("click", () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL("src/popup/pages/dashboard.html") });
-  });

@@ -1,25 +1,22 @@
 # backend/services/gemini_service.py
-# ProspectLens — Central Gemini API Client
+# ProspectLens — Central Gemini API Client with Local Fallbacks
 #
-# This is the SKELETON for Step 2.
-# Full implementation happens in Step 3 (normalize_lead_data)
-# and Steps 7-9 (get_session_behavior_profile for Deep Collect).
-#
-# NOTE: Uses the NEW google.genai SDK (not the deprecated google.generativeai)
-# This eliminates the FutureWarning you saw during environment setup.
+# This file handles all calls to the Gemini API (google-genai SDK).
+# In case of API quota exhaustion (429), timeouts, or missing keys,
+# it falls back to local heuristic/regex algorithms to ensure zero-crash operations.
 
 import os
+import re
 import json
+import random
+from pathlib import Path
+from typing import Optional, List
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
-# Load GEMINI_API_KEY from backend/.env
-load_dotenv()
-
-# ==============================================================================
-# SDK IMPORT — new package
-# If this throws ModuleNotFoundError, run:
-#   pip install google-genai
-# ==============================================================================
+# Load GEMINI_API_KEY from backend/.env relative to this file
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 try:
     from google import genai
@@ -29,108 +26,279 @@ except ImportError:
     GEMINI_AVAILABLE = False
     print("[GeminiService] WARNING: google-genai package not installed. Run: pip install google-genai")
 
-
-# ==============================================================================
-# CLIENT INITIALIZATION
-# ==============================================================================
+MODEL = "gemini-2.0-flash"
 
 def _get_client():
-    """Returns an initialized Gemini client. Raises if API key is missing."""
+    """Returns initialized genai Client, or None if key is missing/invalid."""
     api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("[GeminiService] GEMINI_API_KEY not found in .env file")
-    if not GEMINI_AVAILABLE:
-        raise ImportError("[GeminiService] google-genai package not installed")
-    return genai.Client(api_key=api_key)
+    if not api_key or not GEMINI_AVAILABLE:
+        return None
+    try:
+        return genai.Client(api_key=api_key)
+    except Exception as e:
+        print(f"[GeminiService] Error initializing client: {e}")
+        return None
 
 
-MODEL = "gemini-2.0-flash"      # Free tier: 15 req/min, 1M tokens/day — sufficient for all Phase 1 use
+# ==============================================================================
+# PYDANTIC SCHEMAS FOR STRUCTURED JSON OUTPUT
+# ==============================================================================
+
+class BehaviorProfile(BaseModel):
+    delays: List[float] = Field(description="Delay in seconds before loading each listing details page")
+    heavy_pause_indices: List[int] = Field(description="Zero-indexed listing indices where the crawler should take a heavy break")
+    heavy_pause_durations: List[float] = Field(description="Duration in seconds for each heavy break")
+    scroll_hesitations: List[float] = Field(description="Extra delay in seconds during scroll simulation for each listing")
+
+class NormalizedData(BaseModel):
+    business_name: str
+    phone: Optional[str] = Field(None, description="Standardized phone number in format '+91-XXXXXXXXXX'")
+    city: Optional[str] = Field(None, description="Clean city name, e.g. 'Noida'")
+    state: Optional[str] = Field(None, description="Clean Indian State, e.g. 'Uttar Pradesh'")
+    postal_code: Optional[str] = Field(None, description="6-digit PIN code")
+    contact_person: Optional[str] = Field(None, description="Clean contact person name")
+    category: Optional[str] = Field(None, description="Clean business category/service segment")
+
+class ExtractedContacts(BaseModel):
+    emails: List[str] = Field(default_factory=list, description="All email addresses found")
+    phones: List[str] = Field(default_factory=list, description="All phone numbers found, standardized to +91-XXXXXXXXXX if Indian")
+    whatsapp: List[str] = Field(default_factory=list, description="WhatsApp numbers or chat link values")
+    linkedin: Optional[str] = Field(None, description="Company LinkedIn page URL")
+    instagram: Optional[str] = Field(None, description="Company Instagram handle or URL")
 
 
 # ==============================================================================
 # INTEGRATION 1 — Session Behavior Profile
-# Called ONCE when a Deep Collect job starts.
-# Generates a full human-like delay sequence for the entire session.
-# Implemented fully in Step 7 (IndiaMART adapter).
 # ==============================================================================
 
 async def get_session_behavior_profile(listing_count: int, site: str) -> dict:
     """
-    Returns a dict with delay arrays and pause indices for a Deep Collect session.
-
-    Example return value:
-    {
-        "delays": [4.2, 6.8, 5.1, 7.3, ...],        ← one per listing
-        "heavy_pause_indices": [8, 17, 25],           ← extra long pauses here
-        "heavy_pause_durations": [18.2, 14.7, 21.3], ← duration of each heavy pause
-        "scroll_hesitations": [1.2, 0.8, 2.1, ...]   ← scroll pause per listing
-    }
+    Returns a dict with delay arrays and pause indices.
+    Tries Gemini with schema; falls back to random uniform ranges if Gemini fails.
     """
-    # TODO: Implement in Step 7
-    # Placeholder returns a safe default profile so backend doesn't crash before Step 7
-    import random
-    delays = [round(random.uniform(3.0, 9.0), 1) for _ in range(listing_count)]
+    client = _get_client()
+    if client:
+        try:
+            prompt = (
+                f"Create a human-like scraping delay profile for visiting {listing_count} listings on {site}. "
+                "Delays should range between 3.0 and 8.0 seconds. Include a heavy pause (10.0 to 20.0s) every 7-12 pages. "
+                "Scroll hesitations should be between 0.4 and 1.8 seconds."
+            )
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=BehaviorProfile,
+                    temperature=0.7
+                )
+            )
+            profile_data = json.loads(response.text)
+            # Validate lengths
+            if len(profile_data.get("delays", [])) >= listing_count:
+                return profile_data
+        except Exception as e:
+            print(f"[GeminiService] get_session_behavior_profile failed: {e}. Using local fallback.")
+
+    # Local Fallback
+    delays = [round(random.uniform(4.0, 9.0), 1) for _ in range(listing_count)]
+    scroll_hesitations = [round(random.uniform(0.5, 1.8), 1) for _ in range(listing_count)]
+    heavy_pause_indices = []
+    heavy_pause_durations = []
+    
+    current_index = random.randint(7, 12)
+    while current_index < listing_count:
+        heavy_pause_indices.append(current_index)
+        heavy_pause_durations.append(round(random.uniform(12.0, 20.0), 1))
+        current_index += random.randint(7, 12)
+
     return {
         "delays": delays,
-        "heavy_pause_indices": list(range(8, listing_count, 10)),
-        "heavy_pause_durations": [15.0] * len(range(8, listing_count, 10)),
-        "scroll_hesitations": [round(random.uniform(0.5, 2.0), 1) for _ in range(listing_count)]
+        "heavy_pause_indices": heavy_pause_indices,
+        "heavy_pause_durations": heavy_pause_durations,
+        "scroll_hesitations": scroll_hesitations
     }
 
 
 # ==============================================================================
-# INTEGRATION 2 — Data Normalization
-# Called during /api/ingest to clean messy Indian directory data.
-# Extracts city/state/PIN from raw address. Standardizes phone numbers.
-# Implemented fully in Step 3 (LeadService).
+# INTEGRATION 2 — Data Normalization (Gemini cleans address and standardizes phone)
 # ==============================================================================
 
 async def normalize_lead_data(raw_lead: dict) -> dict:
     """
-    Cleans and normalizes a raw lead dict from the extension.
-    Returns a dict with structured address fields and standardized phone.
-
-    Input:  {"business_name": "ABC Interiors", "address": "Plot 5, Sec 18, Noida UP 201301", "phone": "9876543210"}
-    Output: {"business_name": "ABC Interiors", "address": "...", "city": "Noida", "state": "Uttar Pradesh", "postal_code": "201301", "phone": "+91-9876543210"}
+    Cleans and normalizes raw lead data.
+    Standardizes phone numbers to +91-XXXXXXXXXX.
+    Parses city, state, postal code from raw address fields.
     """
-    # TODO: Implement fully in Step 3
-    # Placeholder passes through raw data unchanged
-    return raw_lead
+    client = _get_client()
+    if client:
+        try:
+            prompt = (
+                "Normalize the following Indian B2B lead info. Extract city, state (full name, e.g. 'Uttar Pradesh'), "
+                "and PIN code from the raw address. If the phone number is provided, convert it to standard format '+91-XXXXXXXXXX'. "
+                f"Lead Details: {json.dumps(raw_lead)}"
+            )
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=NormalizedData,
+                    temperature=0.1
+                )
+            )
+            normalized = json.loads(response.text)
+            
+            # Merge normalized fields back
+            result = raw_lead.copy()
+            for key in ["business_name", "phone", "city", "state", "postal_code", "contact_person", "category"]:
+                val = normalized.get(key)
+                if val:
+                    result[key] = val
+            return result
+        except Exception as e:
+            print(f"[GeminiService] normalize_lead_data failed: {e}. Using local heuristics.")
+
+    # Local Heuristic Fallback
+    return local_normalize_lead_data(raw_lead)
+
+
+def local_normalize_lead_data(raw_lead: dict) -> dict:
+    """Fallback parser for normalizing lead data without API access."""
+    result = raw_lead.copy()
+    
+    # 1. Phone number standardization
+    phone_val = raw_lead.get("phone")
+    if phone_val:
+        result["phone"] = clean_indian_phone(phone_val)
+
+    # 2. Extract PIN code (6 digits)
+    address = raw_lead.get("address", "") or ""
+    pin_match = re.search(r"\b([1-9][0-9]{5})\b", address)
+    if pin_match:
+        result["postal_code"] = pin_match.group(1)
+
+    # 3. Heuristic City and State extraction from address
+    city_list = ["noida", "delhi", "gurgaon", "mumbai", "bangalore", "pune", "chennai", "kolkata", "hyderabad", "ahmedabad", "jaipur", "ghaziabad", "faridabad"]
+    states_map = {
+        "uttar pradesh": ["uttar pradesh", "up"],
+        "haryana": ["haryana", "hr"],
+        "delhi": ["delhi", "nct"],
+        "maharashtra": ["maharashtra", "mh"],
+        "karnataka": ["karnataka", "ka"],
+        "tamil nadu": ["tamil nadu", "tn"],
+        "west bengal": ["west bengal", "wb"],
+        "gujarat": ["gujarat", "gj"]
+    }
+    
+    addr_lower = address.lower()
+    
+    # Detect city
+    if not raw_lead.get("city"):
+        for city in city_list:
+            if re.search(r"\b" + re.escape(city) + r"\b", addr_lower):
+                result["city"] = city.capitalize()
+                break
+
+    # Detect state
+    if not raw_lead.get("state"):
+        for state_name, triggers in states_map.items():
+            for trigger in triggers:
+                if re.search(r"\b" + re.escape(trigger) + r"\b", addr_lower):
+                    result["state"] = state_name.title()
+                    break
+            if result.get("state"):
+                break
+
+    return result
+
+
+def clean_indian_phone(phone_str: str) -> str:
+    """Standardizes a phone string to +91-XXXXXXXXXX format."""
+    digits = re.sub(r"\D", "", phone_str)
+    
+    # Handle landlines or empty digits
+    if not digits:
+        return phone_str
+        
+    if len(digits) == 10:
+        return f"+91-{digits}"
+    elif len(digits) == 12 and digits.startswith("91"):
+        return f"+91-{digits[2:]}"
+    elif len(digits) > 10:
+        # Take last 10 digits
+        return f"+91-{digits[-10:]}"
+    return phone_str
 
 
 # ==============================================================================
 # INTEGRATION 3 — Contact Extraction Assist
-# Called by WebsiteExtractorService for ambiguous contact page layouts.
-# Implemented fully in Step 10 (Website Extractor).
 # ==============================================================================
 
 async def extract_contacts_from_html(html_snippet: str) -> dict:
     """
-    Given raw HTML from a company's contact page, returns structured contact info.
-
-    Output: {"emails": [...], "phones": [...], "whatsapp": [...], "social": {...}}
+    Given raw HTML from a contact page, returns structured contacts.
+    Falls back to regex-based parser if Gemini fails.
     """
-    # TODO: Implement in Step 10
-    return {"emails": [], "phones": [], "whatsapp": [], "social": {}}
+    client = _get_client()
+    if client:
+        try:
+            # Truncate input snippet to save tokens
+            truncated_html = html_snippet[:15000]
+            prompt = (
+                "Extract email addresses, phone numbers, WhatsApp, and social media links "
+                f"from this contact page HTML snippet:\n{truncated_html}"
+            )
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=ExtractedContacts,
+                    temperature=0.1
+                )
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            print(f"[GeminiService] extract_contacts_from_html failed: {e}. Using regex fallback.")
+
+    # Regex Fallback
+    emails = list(set(re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b", html_snippet)))
+    
+    # Simple Indian mobile regex (looks for 10 consecutive digits or separators)
+    raw_phones = re.findall(r"\b(?:(?:\+|0{0,2})91[\s\-]*)?[6-9]\d{9}\b", html_snippet)
+    cleaned_phones = list(set([clean_indian_phone(p) for p in raw_phones]))
+    
+    # Find social links in href attributes
+    linkedin_matches = re.findall(r"href=[\"'](https?://(?:www\.)?linkedin\.com/company/[A-Za-z0-9\-\_]+)[\"']", html_snippet)
+    insta_matches = re.findall(r"href=[\"'](https?://(?:www\.)?instagram\.com/[A-Za-z0-9\-\_\.]+)[\"']", html_snippet)
+    whatsapp_matches = re.findall(r"href=[\"'](https?://api\.whatsapp\.com/send\?phone=\d+|https?://wa\.me/\d+)[\"']", html_snippet)
+
+    return {
+        "emails": emails,
+        "phones": cleaned_phones,
+        "whatsapp": list(set(whatsapp_matches)),
+        "linkedin": linkedin_matches[0] if linkedin_matches else None,
+        "instagram": insta_matches[0] if insta_matches else None
+    }
 
 
 # ==============================================================================
 # HEALTH CHECK
-# Called by GET /health to verify Gemini API key is working.
 # ==============================================================================
 
 def check_gemini_connection() -> dict:
-    """
-    Returns {"status": "ok"} if Gemini API key is valid and reachable.
-    Returns {"status": "error", "message": "..."} if not.
-    """
+    """Verifies that API connection works."""
     try:
         client = _get_client()
-        # Minimal test call — just verifies the key works
+        if not client:
+            return {"status": "error", "message": "No API key configured"}
         response = client.models.generate_content(
             model=MODEL,
-            contents="Reply with the single word: ok"
+            contents="Reply with: ok"
         )
-        return {"status": "ok", "model": MODEL}
+        if "ok" in response.text.lower():
+            return {"status": "ok", "model": MODEL}
+        return {"status": "error", "message": "Unexpected response: " + response.text}
     except Exception as e:
         return {"status": "error", "message": str(e)}

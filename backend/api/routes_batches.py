@@ -76,10 +76,22 @@ def create_batch(batch_in: BatchIn, session: Session = Depends(get_session)):
 # ==============================================================================
 
 @router.get("/batches")
-def get_batches(session: Session = Depends(get_session)):
-    batches = session.exec(
-        select(CollectionBatch).order_by(CollectionBatch.created_at.desc())
-    ).all()
+def get_batches(active_only: bool = False, session: Session = Depends(get_session)):
+    if active_only:
+        # Get batch_ids that have retrieved leads
+        active_batch_ids = session.exec(
+            select(Lead.batch_id).where(Lead.lead_status == "retrieved").distinct()
+        ).all()
+        
+        batches = session.exec(
+            select(CollectionBatch)
+            .where(CollectionBatch.batch_id.in_(active_batch_ids))
+            .order_by(CollectionBatch.created_at.desc())
+        ).all()
+    else:
+        batches = session.exec(
+            select(CollectionBatch).order_by(CollectionBatch.created_at.desc())
+        ).all()
 
     return {
         "status": "ok",

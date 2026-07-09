@@ -24,6 +24,16 @@ async function checkBackend() {
   const text     = badge.querySelector(".dash-status-text");
 
   try {
+    // Check persistent disconnected state first
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      const store = await chrome.storage.local.get("disconnected");
+      if (store.disconnected) {
+        badge.className = "dash-status-badge offline";
+        text.textContent = "Disconnected";
+        return false;
+      }
+    }
+
     const res  = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
     const data = await res.json();
     if (data.status === "ok") {
@@ -330,6 +340,132 @@ async function loadExportHistory() {
 }
 
 // ============================================================
+// LOAD JOBS (Active Background Tasks)
+// ============================================================
+async function loadJobs() {
+  const tbody = document.getElementById("jobs-tbody");
+  try {
+    const res = await fetch(`${API_BASE}/jobs`);
+    const data = await res.json();
+    const jobs = data.jobs || [];
+
+    if (jobs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">No background tasks found.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = jobs.map(j => {
+      const typeLabel = j.job_type === "deep_collect" ? "🔍 Deep Collect" : "🌐 Website Extract";
+      const pct = j.progress_percentage ?? 0;
+      
+      let progressHtml = `
+        <div class="progress-container-inline" style="background: rgba(255,255,255,0.05); border-radius: 4px; height: 8px; width: 100px; position: relative;">
+          <div style="background: var(--btn-primary); width: ${pct}%; height: 100%; border-radius: 4px; transition: width 0.3s ease;"></div>
+        </div>
+        <div style="font-size: 10px; margin-top: 4px; color: var(--text-muted);">${j.records_done} of ${j.records_total} (${pct}%)</div>
+      `;
+
+      let actionButtons = "";
+      if (j.status === "running") {
+        actionButtons = `
+          <button class="btn btn-ghost" style="padding: 2px 6px; font-size: 10px; margin-right: 4px;" onclick="controlJob('${j.job_id}', 'pause')">⏸ Pause</button>
+          <button class="btn btn-danger" style="padding: 2px 6px; font-size: 10px;" onclick="controlJob('${j.job_id}', 'cancel')">⏹ Stop</button>
+        `;
+      } else if (j.status === "paused") {
+        actionButtons = `
+          <button class="btn btn-primary" style="padding: 2px 6px; font-size: 10px; margin-right: 4px;" onclick="controlJob('${j.job_id}', 'resume')">▶ Resume</button>
+          <button class="btn btn-danger" style="padding: 2px 6px; font-size: 10px;" onclick="controlJob('${j.job_id}', 'cancel')">⏹ Stop</button>
+        `;
+      } else {
+        actionButtons = `<span style="color: var(--text-dark); font-size: 11px;">—</span>`;
+      }
+
+      return `
+        <tr data-job-id="${j.job_id}">
+          <td style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${j.job_id.substring(0, 8)}...</td>
+          <td style="font-weight: 600;">${typeLabel}</td>
+          <td style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${j.batch_id ? j.batch_id.substring(0, 8) + '...' : '—'}</td>
+          <td>${progressHtml}</td>
+          <td>
+            <span class="source-badge" style="background: rgba(255,255,255,0.05); color: var(--text-muted); text-transform: capitalize;">
+              ${j.status}
+            </span>
+          </td>
+          <td>${actionButtons}</td>
+        </tr>
+      `;
+    }).join("");
+  } catch {
+    tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">Failed to load background tasks.</td></tr>`;
+  }
+}
+
+async function controlJob(jobId, action) {
+  try {
+    const res = await fetch(`${API_BASE}/jobs/${jobId}/${action}`, { method: "POST" });
+    if (res.ok) {
+      loadJobs();
+    } else {
+      alert(`Failed to ${action} job`);
+    }
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+  }
+}
+
+async function runWebsiteEnrichment() {
+  const checkedCheckboxes = document.querySelectorAll(".lead-checkbox:checked");
+  let batchId = null;
+
+  if (checkedCheckboxes.length > 0) {
+    const leadId = checkedCheckboxes[0].dataset.id;
+    try {
+      const res = await fetch(`${API_BASE}/leads/${leadId}`);
+      const data = await res.json();
+      batchId = data.lead.batch_id;
+    } catch {
+      alert("Failed to find batch ID for the selected leads.");
+      return;
+    }
+  } else {
+    try {
+      const res = await fetch(`${API_BASE}/batches`);
+      const data = await res.json();
+      const batches = data.batches || [];
+      if (batches.length > 0) {
+        if (!confirm(`No leads selected. Do you want to run Website Enrichment on the most recent collection batch: "${batches[0].batch_name}"?`)) {
+          return;
+        }
+        batchId = batches[0].batch_id;
+      } else {
+        alert("No collection batches found. Please run a collection first.");
+        return;
+      }
+    } catch {
+      alert("Failed to fetch batches from backend.");
+      return;
+    }
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/jobs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ batch_id: batchId, job_type: "website_extract" })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert("Website Enrichment job queued successfully! Go to Tasks to view progress.");
+      showSection("jobs");
+    } else {
+      alert(`Failed to start enrichment: ${data.detail || "Unknown error"}`);
+    }
+  } catch (err) {
+    alert(`Error starting enrichment: ${err.message}`);
+  }
+}
+
+// ============================================================
 // EXPORT
 // ============================================================
 async function doExport(format) {
@@ -371,6 +507,7 @@ function showSection(section) {
   document.getElementById("leads-section").classList.add("hidden");
   document.getElementById("batches-section").classList.add("hidden");
   document.getElementById("export-section").classList.add("hidden");
+  document.getElementById("jobs-section").classList.add("hidden");
   document.getElementById("stat-cards").classList.add("hidden");
   document.getElementById("filters-bar").classList.add("hidden");
 
@@ -391,6 +528,14 @@ function showSection(section) {
     document.getElementById("page-title").textContent = "Collections";
     document.getElementById("page-subtitle").textContent = "All past collection sessions";
     loadBatches();
+  }
+
+  if (section === "jobs") {
+    document.getElementById("jobs-section").classList.remove("hidden");
+    document.getElementById("nav-jobs").classList.add("active");
+    document.getElementById("page-title").textContent = "Tasks";
+    document.getElementById("page-subtitle").textContent = "Background collection & enrichment tasks";
+    loadJobs();
   }
 
   if (section === "export") {
@@ -443,6 +588,7 @@ async function init() {
   // Navigation
   document.getElementById("nav-leads").addEventListener("click",   () => showSection("leads"));
   document.getElementById("nav-batches").addEventListener("click", () => showSection("batches"));
+  document.getElementById("nav-jobs").addEventListener("click",    () => showSection("jobs"));
   document.getElementById("nav-export").addEventListener("click",  () => showSection("export"));
 
   // Filters
@@ -518,13 +664,23 @@ async function init() {
     document.querySelectorAll(".lead-checkbox").forEach(cb => cb.checked = e.target.checked);
   });
 
-  // Load leads on start
-  showSection("leads");
+  // Background jobs refresh and website enrichment
+  document.getElementById("btn-refresh-jobs").addEventListener("click", loadJobs);
+  document.getElementById("btn-enrich-websites").addEventListener("click", runWebsiteEnrichment);
+
+  // Load section based on URL hash if present, default to leads
+  const hash = window.location.hash.substring(1);
+  if (["leads", "batches", "jobs", "export"].includes(hash)) {
+    showSection(hash);
+  } else {
+    showSection("leads");
+  }
 }
 
 // Expose functions needed by inline onclick handlers
 window.updateStatus    = updateStatus;
 window.deleteLead      = deleteLead;
 window.openLeadModal   = openLeadModal;
+window.controlJob      = controlJob;
 
 document.addEventListener("DOMContentLoaded", init);

@@ -19,6 +19,7 @@ from api.routes_health  import router as health_router
 from api.routes_leads   import router as leads_router
 from api.routes_batches import router as batches_router
 from api.routes_export  import router as export_router
+from api.routes_jobs    import router as jobs_router
 
 
 # ==============================================================================
@@ -72,6 +73,7 @@ app.include_router(health_router,   prefix="/api")
 app.include_router(leads_router,    prefix="/api")
 app.include_router(batches_router,  prefix="/api")
 app.include_router(export_router,   prefix="/api")
+app.include_router(jobs_router,     prefix="/api")
 
 
 # ==============================================================================

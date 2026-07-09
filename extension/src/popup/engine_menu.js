@@ -20,8 +20,6 @@
       arrowEl.style.transition = "transform 0.2s ease";
     }
 
-    // Refresh jobs count whenever we open the dropdown
-    updateActiveJobsCount();
   });
 
   // Close dropdown on click outside
@@ -118,31 +116,6 @@
       setElementState(dotDb, valDb, "checking");
     }
     
-    updateActiveJobsCount();
-  }
-
-  // Count active progress-bar elements inside the jobs panel
-  const dotJobs = document.getElementById("health-dot-jobs");
-  const valJobs = document.getElementById("health-val-jobs");
-
-  function updateActiveJobsCount() {
-    if (!dotJobs || !valJobs) return;
-    
-    // Count active job card wrappers inside list (we ignore hidden elements)
-    const runningJobs = document.querySelectorAll("#active-jobs-list .job-card:not(.hidden)").length;
-    
-    dotJobs.className = "health-dot";
-    valJobs.className = "health-status";
-    
-    if (runningJobs > 0) {
-      dotJobs.classList.add("dot-yellow");
-      valJobs.classList.add("status-yellow");
-      valJobs.textContent = `${runningJobs} Running`;
-    } else {
-      dotJobs.classList.add("dot-green");
-      valJobs.classList.add("status-green");
-      valJobs.textContent = "0 Running";
-    }
   }
 
   // Create a MutationObserver to watch class changes on the status badge
@@ -159,25 +132,4 @@
   // Initial Sync
   syncSystemHealth();
 
-  // ============================================================
-  // RECONNECT BUTTON CLICK ACTION
-  // ============================================================
-  const reconnectBtn = document.getElementById("btn-reconnect-backend");
-  if (reconnectBtn) {
-    reconnectBtn.addEventListener("click", async (e) => {
-      e.stopPropagation(); // prevent dropdown closing
-      
-      // Visual feedback: show checking states
-      statusBadge.className = "status-badge status-checking";
-      const dotText = statusBadge.querySelector(".status-text");
-      if (dotText) dotText.textContent = "Checking...";
-      
-      syncSystemHealth();
-
-      // Trigger status check from popup.js
-      if (typeof window.checkBackendStatus === "function") {
-        await window.checkBackendStatus();
-      }
-    });
-  }
 })();

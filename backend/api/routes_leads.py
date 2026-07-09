@@ -10,6 +10,7 @@
 # - Getting lead statistics                   (GET  /api/leads/stats)
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlmodel import Session, select
 from typing import Optional
 from datetime import datetime
@@ -17,6 +18,7 @@ from datetime import datetime
 from database.db import get_session
 from database.models import Lead, Contact, SourceRecord
 from services.deduplication import compute_dedup_hash, is_duplicate_lead, compute_url_hash
+from services.gemini_service import normalize_lead_data
 
 router = APIRouter(tags=["Leads"])
 
@@ -69,20 +71,42 @@ class LeadStatusUpdate(BaseModel):
 # ==============================================================================
 
 @router.post("/leads")
-def create_lead(lead_in: LeadIn, session: Session = Depends(get_session)):
+async def create_lead(lead_in: LeadIn, session: Session = Depends(get_session)):
+
+    # Step 0 — Normalize raw details using Gemini/local heuristics
+    raw_lead_dict = {
+        "business_name": lead_in.business_name,
+        "address": lead_in.address,
+        "phone": lead_in.contacts[0].contact_value if lead_in.contacts else None,
+        "city": lead_in.city,
+        "state": lead_in.state,
+        "postal_code": lead_in.postal_code,
+        "contact_person": lead_in.contact_person,
+        "category": lead_in.category
+    }
+    normalized = await normalize_lead_data(raw_lead_dict)
+
+    # Use normalized values
+    biz_name = normalized.get("business_name", lead_in.business_name)
+    addr = normalized.get("address", lead_in.address)
+    city_val = normalized.get("city", lead_in.city)
+    state_val = normalized.get("state", lead_in.state)
+    pin_val = normalized.get("postal_code", lead_in.postal_code)
+    person_val = normalized.get("contact_person", lead_in.contact_person)
+    cat_val = normalized.get("category", lead_in.category)
 
     # Step 1 — Compute dedup hash
     dedup_hash = compute_dedup_hash(
-        business_name=lead_in.business_name,
+        business_name=biz_name,
         source_site=lead_in.source_site,
-        address=lead_in.address or ""
+        address=addr or ""
     )
 
     # Step 2 — Check for duplicate
     if is_duplicate_lead(dedup_hash, session):
         return {
             "status": "duplicate",
-            "message": f"Lead '{lead_in.business_name}' already exists — skipped",
+            "message": f"Lead '{biz_name}' already exists — skipped",
             "lead_id": None
         }
 
@@ -91,30 +115,36 @@ def create_lead(lead_in: LeadIn, session: Session = Depends(get_session)):
         batch_id=lead_in.batch_id,
         search_query=lead_in.search_query,
         source_site=lead_in.source_site,
-        business_name=lead_in.business_name,
+        business_name=biz_name,
         service_name=lead_in.service_name,
-        contact_person=lead_in.contact_person,
+        contact_person=person_val,
         website=lead_in.website,
-        address=lead_in.address,
-        city=lead_in.city,
-        state=lead_in.state,
+        address=addr,
+        city=city_val,
+        state=state_val,
         country=lead_in.country,
-        postal_code=lead_in.postal_code,
-        category=lead_in.category,
+        postal_code=pin_val,
+        category=cat_val,
         listing_url=lead_in.listing_url,
         collection_mode=lead_in.collection_mode,
-        collection_status="success",
+        collection_status="partial" if lead_in.collection_mode == "deep" else "success",
+        lead_status="retrieved",
         dedup_hash=dedup_hash
     )
     session.add(lead)
     session.flush()     # Flush to get lead_id before saving contacts
 
     # Step 4 — Save all contacts
-    for c in lead_in.contacts:
+    # Standardize phone value in contacts if present
+    normalized_phone = normalized.get("phone")
+    for i, c in enumerate(lead_in.contacts):
+        c_val = c.contact_value
+        if c.contact_type == "phone" and i == 0 and normalized_phone:
+            c_val = normalized_phone
         contact = Contact(
             lead_id=lead.lead_id,
             contact_type=c.contact_type,
-            contact_value=c.contact_value,
+            contact_value=c_val,
             sequence_number=c.sequence_number,
             source=c.source
         )
@@ -170,6 +200,9 @@ def get_leads(
         statement = statement.where(Lead.source_site == source_site)
     if lead_status:
         statement = statement.where(Lead.lead_status == lead_status)
+    else:
+        if not batch_id:
+            statement = statement.where(Lead.lead_status != "retrieved")
     if city:
         statement = statement.where(Lead.city == city)
     if batch_id:
@@ -310,3 +343,88 @@ def delete_lead(lead_id: str, session: Session = Depends(get_session)):
         "status": "ok",
         "message": f"Lead {lead_id} deleted successfully"
     }
+
+
+# ==============================================================================
+# EDIT & PROMOTE ENDPOINTS
+# ==============================================================================
+
+class LeadUpdate(BaseModel):
+    business_name:  Optional[str] = None
+    category:       Optional[str] = None
+    contact_person: Optional[str] = None
+    website:        Optional[str] = None
+    address:        Optional[str] = None
+    city:           Optional[str] = None
+    state:          Optional[str] = None
+    postal_code:    Optional[str] = None
+    phone:          Optional[str] = None
+    email:          Optional[str] = None
+
+class PromoteLeadsRequest(BaseModel):
+    lead_ids: list[str]
+
+@router.put("/leads/{lead_id}")
+def update_lead(lead_id: str, update: LeadUpdate, session: Session = Depends(get_session)):
+    lead = session.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    if update.business_name is not None: lead.business_name = update.business_name
+    if update.category is not None: lead.category = update.category
+    if update.contact_person is not None: lead.contact_person = update.contact_person
+    if update.website is not None: lead.website = update.website
+    if update.address is not None: lead.address = update.address
+    if update.city is not None: lead.city = update.city
+    if update.state is not None: lead.state = update.state
+    if update.postal_code is not None: lead.postal_code = update.postal_code
+    
+    # Update primary phone
+    if update.phone is not None:
+        phone_contact = session.exec(
+            select(Contact).where(
+                (Contact.lead_id == lead_id) & 
+                (Contact.contact_type == "phone") & 
+                (Contact.sequence_number == 1)
+            )
+        ).first()
+        if phone_contact:
+            if update.phone.strip():
+                phone_contact.contact_value = update.phone
+            else:
+                session.delete(phone_contact)
+        elif update.phone.strip():
+            session.add(Contact(lead_id=lead_id, contact_type="phone", contact_value=update.phone, sequence_number=1, source="editor"))
+            
+    # Update primary email
+    if update.email is not None:
+        email_contact = session.exec(
+            select(Contact).where(
+                (Contact.lead_id == lead_id) & 
+                (Contact.contact_type == "email") & 
+                (Contact.sequence_number == 1)
+            )
+        ).first()
+        if email_contact:
+            if update.email.strip():
+                email_contact.contact_value = update.email
+            else:
+                session.delete(email_contact)
+        elif update.email.strip():
+            session.add(Contact(lead_id=lead_id, contact_type="email", contact_value=update.email, sequence_number=1, source="editor"))
+            
+    session.add(lead)
+    session.commit()
+    return {"status": "ok", "message": "Lead updated successfully"}
+
+@router.post("/leads/promote")
+def promote_leads(req: PromoteLeadsRequest, session: Session = Depends(get_session)):
+    promoted_count = 0
+    for lead_id in req.lead_ids:
+        lead = session.get(Lead, lead_id)
+        if lead and lead.lead_status == "retrieved":
+            lead.lead_status = "new"
+            session.add(lead)
+            promoted_count += 1
+    session.commit()
+    return {"status": "ok", "message": f"{promoted_count} leads promoted to main collection"}

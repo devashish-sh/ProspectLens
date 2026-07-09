@@ -1,34 +1,40 @@
 /* dashboard.css — Premium Glassmorphic Dark UI for ProspectLens Dashboard */
 
 :root {
-  --bg:           #141619;                    /* Warm Charcoal Black */
-  --bg-sidebar:   rgba(26, 29, 33, 0.8);      /* Glass Sidebar */
-  --panel-bg:     rgba(32, 36, 42, 0.72);     /* Glass Base */
-  --panel-hover:  rgba(40, 45, 53, 0.85);
-  --card-bg:      rgba(255, 255, 255, 0.015); /* Transparent Card */
-  --accent:       #4C5C2D;                    /* Sage/Olive Green Accent */
-  --accent-low:   rgba(76, 92, 45, 0.05);
-  --accent-mid:   rgba(76, 92, 45, 0.12);
-  --accent-bdr:   rgba(76, 92, 45, 0.22);
-  --text:         #f3f4f6;                    /* Crisp text */
-  --text-muted:   #9ca3af;                    /* Slate grey */
-  --text-dark:    #4b5563;                    /* Muted labels */
-  --border:       rgba(255, 255, 255, 0.05);  /* Grid border */
-  --danger:       #ef4444;                    /* Red */
-  --danger-low:   rgba(239, 68, 68, 0.08);
-  --warn:         #f59e0b;                    /* Amber */
-  --warn-low:     rgba(245, 158, 11, 0.08);
-  --info:         #3b82f6;                    /* Blue */
-  --info-low:     rgba(59, 130, 246, 0.08);
-  --purple:       #8b5cf6;                    /* Violet */
-  --purple-low:   rgba(139, 92, 246, 0.08);
+  --bg:           #1F201F;                    /* Main Background */
+  --bg-sidebar:   #1A1A1A;                    /* Solid Dark Sidebar */
+  --panel-bg:     #242424;                    /* Primary Cards Background */
+  --panel-hover:  #2D2D2D;                    /* Hover Surface */
+  --card-bg:      #242424;                    /* Solid Card Background */
+  --accent:       #76A544;                    /* Primary Accent Green */
+  --accent-low:   rgba(118, 165, 68, 0.08);
+  --accent-mid:   rgba(118, 165, 68, 0.15);
+  --accent-bdr:   rgba(118, 165, 68, 0.25);
+  --btn-primary:         #76A544;             /* Button Green Accent */
+  --btn-primary-hover:   #658D3B;             /* Dark Accent */
+  --btn-primary-pressed: #52602D;             /* Hover/Pressed */
+  --text:         #E3E4E3;                    /* Primary Text */
+  --text-muted:   #9E9F9E;                    /* Secondary Text */
+  --text-dark:    #606060;                    /* Muted Labels / Text */
+  --border:       #3A3A3A;                    /* Border */
+  --danger:       #C84E4E;                    /* Error */
+  --danger-low:   rgba(200, 78, 78, 0.08);
+  --warn:         #D39C2F;                    /* Warning */
+  --warn-low:     rgba(211, 156, 47, 0.08);
+  --info:         #4686E3;                    /* Information */
+  --info-low:     rgba(70, 134, 227, 0.08);
+  --purple:       #581C87;                    /* Muted Purple */
+  --purple-low:   rgba(88, 28, 135, 0.08);
+  --blue:         #4686E3;                    /* Primary Blue */
+  --blue-low:     rgba(70, 134, 227, 0.08);
+  --blue-bg:      #243349;                    /* Secondary Surface / Background Blue */
   
-  --r:            12px;                       /* Curves */
-  --r-inner:      6px;
+  --r:            12px;                       /* Cards Border Radius */
+  --r-inner:      8px;                        /* Inner Elements Radius */
   --sidebar:      200px;
   --transition:   all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --glass-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.65);
-  --font-family:  'Quicksand', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-family:  'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 * {
@@ -128,15 +134,15 @@ body {
 }
 
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--panel-hover);
   color: var(--text);
 }
 
 .nav-link.active {
-  background: var(--accent-low);
-  color: var(--accent);
-  border-color: var(--accent-bdr);
-  box-shadow: 0 0 15px rgba(76, 92, 45, 0.05);
+  background: rgba(118, 165, 68, 0.12);
+  color: var(--btn-primary);
+  border-color: rgba(118, 165, 68, 0.25);
+  box-shadow: 0 0 15px rgba(118, 165, 68, 0.05);
 }
 
 .nav-link svg {
@@ -293,10 +299,10 @@ body {
   flex: 2;
   min-width: 200px;
   padding: 8px 14px;
-  background: var(--panel-bg);
+  background: #334155;
   backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: var(--r);
+  border-radius: 10px;
   color: var(--text);
   font-size: 12.5px;
   outline: none;
@@ -304,8 +310,8 @@ body {
 }
 
 .f-input:focus {
-  border-color: var(--accent-bdr);
-  box-shadow: 0 0 10px rgba(76, 92, 45, 0.05);
+  border-color: var(--btn-primary);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.05);
 }
 
 .f-input::placeholder {
@@ -314,10 +320,10 @@ body {
 
 .f-select {
   padding: 8px 12px;
-  background: var(--panel-bg);
+  background: #334155;
   backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: var(--r);
+  border-radius: 10px;
   color: var(--text);
   font-size: 12px;
   outline: none;
@@ -326,7 +332,7 @@ body {
 }
 
 .f-select:focus {
-  border-color: var(--accent-bdr);
+  border-color: var(--btn-primary);
 }
 
 .f-select option {
@@ -347,21 +353,23 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%), var(--accent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%), var(--btn-primary);
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 4px 12px rgba(76, 92, 45, 0.15);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 4px 12px rgba(15, 110, 50, 0.15);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3), 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%), #5a6e35;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 16px rgba(255, 255, 255, 0.15), 0 4px 16px rgba(76, 92, 45, 0.3);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%), var(--btn-primary-hover);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 16px rgba(255, 255, 255, 0.15), 0 4px 16px rgba(118, 165, 68, 0.3);
   transform: translateY(-1px);
 }
 
 .btn-primary:active {
-  transform: translateY(1px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 100%), var(--btn-primary-pressed);
+  box-shadow: inset 0 1.5px 3px rgba(0, 0, 0, 0.35);
+  transform: translateY(0.5px);
 }
 
 .btn-ghost {
@@ -436,6 +444,10 @@ body {
 
 .tbl tbody tr {
   transition: var(--transition);
+}
+
+.tbl tbody tr:has(.lead-checkbox:checked) {
+  background: rgba(118, 165, 68, 0.06);
 }
 
 .tbl tbody tr:hover {
