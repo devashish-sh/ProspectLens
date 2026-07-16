@@ -606,10 +606,10 @@ body {
 /* ── BOTTOM NAVIGATION TAB BAR ── */
 .bottom-nav {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   background: var(--bg-dark);
   border-top: 1px solid var(--border);
-  padding: 6px 4px 8px;
+  padding: 8px 4px;
   position: fixed;
   bottom: 0;
   left: 0;
@@ -629,6 +629,8 @@ body {
   transition: var(--transition);
   padding: 4px 0;
   border-radius: 8px;
+  border: 1.2px solid transparent;
+  box-sizing: border-box;
 }
 
 .nav-tab-icon {
@@ -642,6 +644,7 @@ body {
   font-size: 8px;
   font-weight: 750;
   letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 
 .nav-tab:hover {

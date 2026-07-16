@@ -110,7 +110,10 @@ async function loadStats() {
     const data = await res.json();
 
     document.getElementById("stat-total").textContent = data.total_leads ?? 0;
-    document.getElementById("stat-new").textContent   = data.by_status?.new ?? 0;
+    
+    // Count active sources
+    const activeSources = Object.keys(data.by_source || {}).filter(k => data.by_source[k] > 0).length;
+    document.getElementById("stat-new").textContent = activeSources;
 
     // Count today's leads from batches
     const batchRes  = await fetch(`${API_BASE}/batches`);
@@ -128,50 +131,78 @@ async function loadStats() {
 }
 
 // ============================================================
-// LOAD RECENT BATCHES
+// LOAD PERSISTENT DATA CAPSULES
 // ============================================================
-function formatActivityName(sourceSite, createdAtStr) {
-  const siteName = (sourceSite || "collection").toLowerCase().replace(/\s+/g, "");
-  if (!createdAtStr) return siteName;
-  const date = new Date(createdAtStr);
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  
-  let hours = date.getHours();
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'pm' : 'am';
-  hours = hours % 12;
-  hours = hours ? hours : 12; // the hour '0' should be '12'
-  
-  const timeStr = `${hours}:${minutes}${ampm}`;
-  return `${siteName}_${yyyy}-${mm}-${dd}_${timeStr}`;
+function formatTimeAgo(dateStr) {
+  if (!dateStr) return "Waiting";
+  try {
+    let parsedStr = dateStr;
+    if (!parsedStr.endsWith("Z") && !parsedStr.includes("+")) {
+      parsedStr += "Z";
+    }
+    const date = new Date(parsedStr);
+    const seconds = Math.floor((new Date() - date) / 1000);
+    
+    if (seconds < 60) return "Updated just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `Updated ${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `Updated ${hours} hours ago`;
+    
+    return "Updated " + date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  } catch {
+    return dateStr;
+  }
 }
 
-function openBatchDashboard(batchId) {
-  chrome.tabs.create({ url: chrome.runtime.getURL(`src/popup/pages/dashboard.html?batch_id=${batchId}#leads`) });
+function openCapsuleDashboard(sourceSite) {
+  chrome.tabs.create({ url: chrome.runtime.getURL(`src/popup/pages/dashboard.html?capsule=${sourceSite}#capsules`) });
 }
-window.openBatchDashboard = openBatchDashboard;
+window.openCapsuleDashboard = openCapsuleDashboard;
 
 async function loadRecentBatches() {
   const container = document.getElementById("recent-batches");
 
-  try {
-    const res  = await fetch(`${API_BASE}/batches?active_only=true`);
-    const data = await res.json();
-    const batches = (data.batches || []).slice(0, 5);
+  const CAPSULES_DEF = [
+    { key: "googlemaps", name: "Google Maps", icon: "🗺️", sourceSite: "googlemaps" },
+    { key: "indiamart", name: "IndiaMART", icon: "🏭", sourceSite: "indiamart" },
+    { key: "justdial", name: "Justdial", icon: "📞", sourceSite: "justdial" },
+    { key: "tradeindia", name: "TradeIndia", icon: "📦", sourceSite: "tradeindia" }
+  ];
 
-    if (batches.length === 0) {
-      container.innerHTML = '<div class="empty-state">No active storage capsules</div>';
+  try {
+    const statsRes = await fetch(`${API_BASE}/leads/stats`);
+    const statsData = await statsRes.json();
+    const sourceCounts = statsData.by_source || {};
+
+    const batchRes = await fetch(`${API_BASE}/batches`);
+    const batchData = await batchRes.json();
+    const batches = batchData.batches || [];
+
+    const activeCapsules = CAPSULES_DEF.filter(c => (sourceCounts[c.sourceSite] || 0) > 0);
+
+    if (activeCapsules.length === 0) {
+      container.innerHTML = '<div class="empty-msg">No collections yet</div>';
       return;
     }
 
-    container.innerHTML = batches.map(b => {
-      const formattedName = formatActivityName(b.source_site, b.created_at);
+    container.innerHTML = activeCapsules.map(c => {
+      const totalLeads = sourceCounts[c.sourceSite] || 0;
+      const sourceBatches = batches.filter(b => (b.source_site || "").toLowerCase().replace(/\s+/g, "") === c.sourceSite);
+      
+      let lastUpdated = null;
+      if (sourceBatches.length > 0) {
+        sourceBatches.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        lastUpdated = sourceBatches[0].created_at;
+      }
+
+      const timeText = lastUpdated ? formatTimeAgo(lastUpdated) : "Waiting";
+      const countLabel = totalLeads === 1 ? "1 Lead" : `${totalLeads} Leads`;
+
       return `
-        <div class="batch-item" style="cursor: pointer;" onclick="openBatchDashboard('${b.batch_id}')">
-          <span class="batch-name">${formattedName}</span>
-          <span class="batch-count">${b.successful_records || 0} leads</span>
+        <div class="batch-item" style="cursor: pointer;" onclick="openCapsuleDashboard('${c.sourceSite}')">
+          <span class="batch-name">${c.name}</span>
+          <span class="batch-count">${countLabel} • ${timeText}</span>
         </div>
       `;
     }).join("");
@@ -367,6 +398,14 @@ async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const site  = tab?.url ? detectSite(tab.url) : null;
 
+  if (site) {
+    const visitsKey = `prospectlens-visits-${site.key}`;
+    const visits = parseInt(localStorage.getItem(visitsKey) || "0") + 1;
+    localStorage.setItem(visitsKey, visits);
+    localStorage.setItem(`prospectlens-last-active-${site.key}`, new Date().toISOString());
+    broadcastStateUpdate();
+  }
+
   // 3. Show correct banner
   if (site) {
     document.getElementById("page-banner").classList.remove("hidden");
@@ -392,15 +431,30 @@ async function init() {
       alert("Backend is offline. Start it with: uvicorn main:app --reload --port 8000");
       return;
     }
-    if (site) startCollection(site);
+    if (site) {
+      const searchesKey = `prospectlens-searches-${site.key}`;
+      const searches = parseInt(localStorage.getItem(searchesKey) || "0") + 1;
+      localStorage.setItem(searchesKey, searches);
+      
+      startCollection(site);
+      
+      // Broadcast state update
+      setTimeout(broadcastStateUpdate, 1200);
+    }
   });
+
+  function broadcastStateUpdate() {
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ type: "STATE_UPDATED" });
+    }
+  }
 
   // 7. Export button
   document.getElementById("btn-export").addEventListener("click", handleExport);
 
-  // 8. Settings button (placeholder for now)
+  // 8. Settings button
   document.getElementById("btn-settings").addEventListener("click", () => {
-    alert("Settings coming in a future update.");
+    openDashboard("#settings");
   });
 
   // 9. Connect/Disconnect button click handler
@@ -437,12 +491,131 @@ async function init() {
   };
 
   // View All button (recent activity section)
-  document.getElementById("open-dashboard").addEventListener("click", () => openDashboard());
+  document.getElementById("open-dashboard").addEventListener("click", () => openDashboard("#leads"));
 
   // Bottom navigation tab bar items
   document.getElementById("open-dashboard-leads").addEventListener("click", () => openDashboard("#leads"));
-  document.getElementById("open-dashboard-batches").addEventListener("click", () => openDashboard("#batches"));
-  document.getElementById("open-dashboard-extract").addEventListener("click", () => openDashboard("#jobs"));
+  
+  // Home button click listener
+  document.getElementById("btn-home").addEventListener("click", () => {
+    document.querySelectorAll(".nav-tab").forEach(tab => tab.classList.remove("active"));
+    document.getElementById("btn-home").classList.add("active");
+    document.getElementById("home-page-view").classList.remove("hidden");
+    document.getElementById("capsules-page-view").classList.add("hidden");
+  });
+
+  // Capsules button click listener
+  document.getElementById("open-dashboard-batches").addEventListener("click", () => {
+    document.querySelectorAll(".nav-tab").forEach(tab => tab.classList.remove("active"));
+    document.getElementById("open-dashboard-batches").classList.add("active");
+    document.getElementById("home-page-view").classList.add("hidden");
+    document.getElementById("capsules-page-view").classList.remove("hidden");
+    loadCapsulesLibrary();
+  });
+
+  // 10. Listen for real-time state updates from other views (e.g. dashboard)
+  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === "STATE_UPDATED") {
+        loadStats();
+        loadRecentBatches();
+        if (!document.getElementById("capsules-page-view").classList.contains("hidden")) {
+          loadCapsulesLibrary();
+        }
+      }
+    });
+  }
+}
+
+// ============================================================
+// POPUP CAPSULES SOURCE MEMORY LIBRARY LOADER
+// ============================================================
+async function loadCapsulesLibrary() {
+  const container = document.getElementById("capsules-library-list");
+  if (!container) return;
+  container.innerHTML = `<div class="empty-msg">Loading library...</div>`;
+
+  try {
+    const statsRes = await fetch(`${API_BASE}/leads/stats`);
+    const stats = await statsRes.json();
+    const sourceCounts = stats.by_source || {};
+
+    const batchRes = await fetch(`${API_BASE}/batches`);
+    const batchData = await batchRes.json();
+    const batches = batchData.batches || [];
+
+    const CAPSULES_DEF = [
+      { key: "googlemaps", name: "Google Maps", icon: "🗺️" },
+      { key: "indiamart", name: "IndiaMART", icon: "🏭" },
+      { key: "justdial", name: "Justdial", icon: "📞" },
+      { key: "tradeindia", name: "TradeIndia", icon: "📦" }
+    ];
+
+    container.innerHTML = "";
+
+    CAPSULES_DEF.forEach(c => {
+      const count = sourceCounts[c.key] || 0;
+      const sourceBatches = batches.filter(b => (b.source_site || "").toLowerCase().replace(/\s+/g, "") === c.key);
+      
+      const visits = localStorage.getItem(`prospectlens-visits-${c.key}`) || (sourceBatches.length > 0 ? sourceBatches.length * 2 + 1 : 0);
+      const searches = localStorage.getItem(`prospectlens-searches-${c.key}`) || sourceBatches.length;
+
+      let lastUpdated = null;
+      if (sourceBatches.length > 0) {
+        sourceBatches.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        lastUpdated = sourceBatches[0].created_at;
+      } else {
+        lastUpdated = localStorage.getItem(`prospectlens-last-active-${c.key}`) || null;
+      }
+
+      const timeText = lastUpdated ? formatTimeAgo(lastUpdated) : "Never visited";
+      
+      // Determine collection status
+      let status = "Never Collected";
+      if (localStorage.getItem(`prospectlens-collecting-${c.key}`) === "true") {
+        status = "Collecting";
+      } else if (count > 0) {
+        status = "Completed";
+      } else if (searches > 0) {
+        status = "No Leads";
+      } else if (visits > 0) {
+        status = "Visited";
+      }
+
+      const card = document.createElement("div");
+      card.className = "batch-item capsule-item";
+      card.style.cssText = "cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; margin-bottom: 5px; opacity: 0; transform: translateY(10px); transition: all 0.3s ease;";
+      card.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 16px;">${c.icon}</span>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span class="batch-name" style="font-size: 11px; font-weight: 700; color: #ffffff;">${c.name}</span>
+            <span style="font-size: 8px; color: var(--text-dark);">Visited ${visits == 1 ? '1 time' : visits + ' times'} • Active: ${timeText}</span>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+          <span class="batch-count" style="font-size: 11px; color: var(--accent); font-weight: 800;">${count} Leads</span>
+          <span class="status-indicator" style="font-size: 8px; color: var(--accent); opacity: 0.8; font-weight: 700; text-transform: uppercase;">${status}</span>
+        </div>
+      `;
+
+      card.addEventListener("click", () => {
+        const route = count > 0 ? "batches" : "intel";
+        chrome.tabs.create({ url: chrome.runtime.getURL(`src/popup/pages/dashboard.html?capsule=${c.key}#${route}`) });
+      });
+
+      container.appendChild(card);
+
+      // Trigger fade-in animation
+      setTimeout(() => {
+        card.style.opacity = "1";
+        card.style.transform = "translateY(0)";
+      }, 50 * container.children.length);
+    });
+
+  } catch (err) {
+    container.innerHTML = `<div class="empty-msg" style="color: #ff4444;">Failed to load library data.</div>`;
+  }
 }
 
 // Run on popup open

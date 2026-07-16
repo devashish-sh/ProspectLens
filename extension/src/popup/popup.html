@@ -214,85 +214,102 @@
   </header>
 
   <!-- ================================================================
-    CURRENT PAGE STATUS CARD (COMPATIBLE SITE DETECTOR)
+    HOME PAGE VIEW CONTAINER
   ================================================================ -->
-  <div id="page-banner" class="page-banner hidden">
-    <!-- Icon injected here -->
-    <span id="page-icon" class="page-icon"></span>
-    <div class="page-mid-content">
-      <span id="page-name" class="page-name"></span>
-      <span class="page-desc">Directory Search Results</span>
-    </div>
-    <span class="page-ready">✓ Compatible</span>
-  </div>
-
-  <div id="unsupported-banner" class="unsupported-banner hidden">
-    Open IndiaMART, Google Maps, or Justdial to collect
-  </div>
-
-  <!-- ================================================================
-    COLLECTION MODE SELECTOR
-  ================================================================ -->
-  <div id="collection-panel" class="collection-panel hidden">
-    <div class="mode-selector">
-      <button class="mode-btn active" id="mode-quick" data-mode="quick">
-        <div class="mode-btn-content">
-          <span class="mode-btn-title">Quick Collect</span>
-          <span class="mode-btn-sub">Fast & Safe</span>
-        </div>
-      </button>
-      <button class="mode-btn" id="mode-deep" data-mode="deep">
-        <div class="mode-btn-content">
-          <span class="mode-btn-title">Deep Collect</span>
-          <span class="mode-btn-sub">Detailed & Powerful</span>
-        </div>
-      </button>
-    </div>
-
-    <p class="mode-desc" id="mode-desc">Collects visible listings on current page. Fast, no navigation.</p>
-
-    <button class="collect-btn" id="collect-btn">
-      <span class="collect-btn-text">Start Collection</span>
-    </button>
-
-    <div class="progress-wrap hidden" id="progress-container">
-      <div class="progress-track">
-        <div class="progress-fill" id="progress-fill"></div>
+  <div id="home-page-view">
+    <!-- ================================================================
+      CURRENT PAGE STATUS CARD (COMPATIBLE SITE DETECTOR)
+    ================================================================ -->
+    <div id="page-banner" class="page-banner hidden">
+      <!-- Icon injected here -->
+      <span id="page-icon" class="page-icon"></span>
+      <div class="page-mid-content">
+        <span id="page-name" class="page-name"></span>
+        <span class="page-desc">Directory Search Results</span>
       </div>
-      <div class="progress-text" id="progress-text">Starting...</div>
+      <span class="page-ready">✓ Compatible</span>
+    </div>
+
+    <div id="unsupported-banner" class="unsupported-banner hidden">
+      Open IndiaMART, Google Maps, or Justdial to collect
+    </div>
+
+    <!-- ================================================================
+      COLLECTION MODE SELECTOR
+    ================================================================ -->
+    <div id="collection-panel" class="collection-panel hidden">
+      <div class="mode-selector">
+        <button class="mode-btn active" id="mode-quick" data-mode="quick">
+          <div class="mode-btn-content">
+            <span class="mode-btn-title">Quick Collect</span>
+            <span class="mode-btn-sub">Fast & Safe</span>
+          </div>
+        </button>
+        <button class="mode-btn" id="mode-deep" data-mode="deep">
+          <div class="mode-btn-content">
+            <span class="mode-btn-title">Deep Collect</span>
+            <span class="mode-btn-sub">Detailed & Powerful</span>
+          </div>
+        </button>
+      </div>
+
+      <p class="mode-desc" id="mode-desc">Collects visible listings on current page. Fast, no navigation.</p>
+
+      <button class="collect-btn" id="collect-btn">
+        <span class="collect-btn-text">Start Collection</span>
+      </button>
+
+      <div class="progress-wrap hidden" id="progress-container">
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-text" id="progress-text">Starting...</div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+      LEAD STATS CARD GRID
+    ================================================================ -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-number" id="stat-total">—</div>
+        <div class="stat-label">Total Leads</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="stat-today">—</div>
+        <div class="stat-label">Today's Collection</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="stat-new">—</div>
+        <div class="stat-label">Active Sources</div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+      DATA CAPSULES
+    ================================================================ -->
+    <div class="section activity-section">
+      <div class="section-header">
+        <span class="section-title">DATA CAPSULES</span>
+        <button class="link-btn" id="open-dashboard">View All →</button>
+      </div>
+      <div id="recent-batches" class="recent-list">
+        <div class="empty-msg">No collections yet</div>
+      </div>
     </div>
   </div>
 
   <!-- ================================================================
-    LEAD STATS CARD GRID
+    CAPSULES LIBRARY VIEW (POPUP SOURCE MEMORY TAB)
   ================================================================ -->
-  <div class="stats-row">
-    <div class="stat-card">
-      <div class="stat-number" id="stat-total">—</div>
-      <div class="stat-label">Total Leads</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-number" id="stat-today">—</div>
-      <div class="stat-label">Today</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-number" id="stat-new">—</div>
-      <div class="stat-label">Exports</div>
-    </div>
-  </div>
-
-
-
-  <!-- ================================================================
-    RECENT ACTIVITY
-  ================================================================ -->
-  <div class="section activity-section">
-    <div class="section-header">
-      <span class="section-title">RECENT ACTIVITY</span>
-      <button class="link-btn" id="open-dashboard">View All →</button>
-    </div>
-    <div id="recent-batches" class="recent-list">
-      <div class="empty-msg">No collections yet</div>
+  <div id="capsules-page-view" class="hidden">
+    <div class="section activity-section" style="margin-top: 10px;">
+      <div class="section-header">
+        <span class="section-title">LEAD SOURCE LIBRARY</span>
+      </div>
+      <div id="capsules-library-list" class="recent-list">
+        <div class="empty-msg">No capsules loaded</div>
+      </div>
     </div>
   </div>
 
@@ -300,7 +317,7 @@
     BOTTOM NAVIGATION TAB BAR
   ================================================================ -->
   <footer class="bottom-nav">
-    <div class="nav-tab active">
+    <div class="nav-tab active" id="btn-home">
       <svg class="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="7" height="7" rx="1.5" />
         <rect x="14" y="3" width="7" height="7" rx="1.5" />
@@ -309,12 +326,6 @@
       </svg>
       <span class="nav-tab-label">Home</span>
     </div>
-    <div class="nav-tab" id="open-dashboard-batches">
-      <svg class="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
-      </svg>
-      <span class="nav-tab-label">Batches</span>
-    </div>
     <div class="nav-tab" id="open-dashboard-leads">
       <svg class="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -322,16 +333,22 @@
         <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
         <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
-      <span class="nav-tab-label">Leads</span>
+      <span class="nav-tab-label">Dashboard</span>
     </div>
-    <div class="nav-tab" id="open-dashboard-extract">
+    <div class="nav-tab" id="open-dashboard-batches">
+      <svg class="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+      </svg>
+      <span class="nav-tab-label">Capsules</span>
+    </div>
+    <div class="nav-tab" id="open-dashboard-extract" style="display: none;">
       <svg class="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8" />
         <path d="m21 21-4.3-4.3" />
       </svg>
       <span class="nav-tab-label">Extract</span>
     </div>
-    <div class="nav-tab" id="btn-export">
+    <div class="nav-tab" id="btn-export" style="display: none;">
       <svg class="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round" />
       </svg>

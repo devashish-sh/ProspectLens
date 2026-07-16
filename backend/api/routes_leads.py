@@ -199,10 +199,13 @@ def get_leads(
     if source_site:
         statement = statement.where(Lead.source_site == source_site)
     if lead_status:
-        statement = statement.where(Lead.lead_status == lead_status)
+        if lead_status != "all":
+            statement = statement.where(Lead.lead_status == lead_status)
     else:
         if not batch_id:
             statement = statement.where(Lead.lead_status != "retrieved")
+        else:
+            statement = statement.where(Lead.lead_status == "retrieved")
     if city:
         statement = statement.where(Lead.city == city)
     if batch_id:
@@ -216,10 +219,31 @@ def get_leads(
 
     leads = session.exec(statement).all()
 
+    # Map phone and email from contacts
+    lead_list = []
+    for lead in leads:
+        lead_dict = lead.model_dump()
+        
+        phone_contact = session.exec(
+            select(Contact)
+            .where((Contact.lead_id == lead.lead_id) & (Contact.contact_type == "phone"))
+            .order_by(Contact.sequence_number.asc())
+        ).first()
+        lead_dict["phone"] = phone_contact.contact_value if phone_contact else None
+        
+        email_contact = session.exec(
+            select(Contact)
+            .where((Contact.lead_id == lead.lead_id) & (Contact.contact_type == "email"))
+            .order_by(Contact.sequence_number.asc())
+        ).first()
+        lead_dict["email"] = email_contact.contact_value if email_contact else None
+        
+        lead_list.append(lead_dict)
+
     return {
         "status": "ok",
-        "count": len(leads),
-        "leads": leads
+        "count": len(lead_list),
+        "leads": lead_list
     }
 
 
@@ -230,6 +254,7 @@ def get_leads(
 
 @router.get("/leads/stats")
 def get_lead_stats(session: Session = Depends(get_session)):
+    main_leads = session.exec(select(Lead).where(Lead.lead_status != "retrieved")).all()
     all_leads = session.exec(select(Lead)).all()
 
     total        = len(all_leads)
@@ -237,17 +262,17 @@ def get_lead_stats(session: Session = Depends(get_session)):
     by_source    = {}
     by_city      = {}
 
-    for lead in all_leads:
-        # Count by status
+    for lead in main_leads:
         by_status[lead.lead_status] = by_status.get(lead.lead_status, 0) + 1
-        # Count by source
-        by_source[lead.source_site] = by_source.get(lead.source_site, 0) + 1
-        # Count by city
         if lead.city:
             by_city[lead.city] = by_city.get(lead.city, 0) + 1
 
+    for lead in all_leads:
+        by_source[lead.source_site] = by_source.get(lead.source_site, 0) + 1
+
     return {
         "total_leads": total,
+        "total_database_leads": len(all_leads),
         "by_status":   by_status,
         "by_source":   by_source,
         "top_cities":  dict(sorted(by_city.items(), key=lambda x: x[1], reverse=True)[:10])
@@ -360,6 +385,9 @@ class LeadUpdate(BaseModel):
     postal_code:    Optional[str] = None
     phone:          Optional[str] = None
     email:          Optional[str] = None
+    notes:          Optional[str] = None
+    tags:           Optional[str] = None
+    lead_status:    Optional[str] = None
 
 class PromoteLeadsRequest(BaseModel):
     lead_ids: list[str]
@@ -378,6 +406,9 @@ def update_lead(lead_id: str, update: LeadUpdate, session: Session = Depends(get
     if update.city is not None: lead.city = update.city
     if update.state is not None: lead.state = update.state
     if update.postal_code is not None: lead.postal_code = update.postal_code
+    if update.notes is not None: lead.notes = update.notes
+    if update.tags is not None: lead.tags = update.tags
+    if update.lead_status is not None: lead.lead_status = update.lead_status
     
     # Update primary phone
     if update.phone is not None:
@@ -423,8 +454,28 @@ def promote_leads(req: PromoteLeadsRequest, session: Session = Depends(get_sessi
     for lead_id in req.lead_ids:
         lead = session.get(Lead, lead_id)
         if lead and lead.lead_status == "retrieved":
-            lead.lead_status = "new"
-            session.add(lead)
-            promoted_count += 1
+            # Check if there is already a lead with the same dedup_hash in the main collection
+            existing_main = session.exec(
+                select(Lead).where(
+                    (Lead.dedup_hash == lead.dedup_hash) & 
+                    (Lead.lead_status != "retrieved") &
+                    (Lead.lead_id != lead_id)
+                )
+            ).first()
+            
+            if existing_main:
+                # Delete duplicate temporary lead and its contacts
+                contacts = session.exec(select(Contact).where(Contact.lead_id == lead_id)).all()
+                for c in contacts:
+                    session.delete(c)
+                source_records = session.exec(select(SourceRecord).where(SourceRecord.lead_id == lead_id)).all()
+                for sr in source_records:
+                    session.delete(sr)
+                session.delete(lead)
+            else:
+                lead.lead_status = "new"
+                session.add(lead)
+                promoted_count += 1
+                
     session.commit()
     return {"status": "ok", "message": f"{promoted_count} leads promoted to main collection"}

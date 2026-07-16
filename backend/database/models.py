@@ -41,6 +41,8 @@ class Lead(SQLModel, table=True):
     lead_status:      str      = Field(default="new", index=True)   # new / contacted / qualified / closed
     dedup_hash:       str      = Field(default="", index=True)      # SHA-256 fingerprint (unique key)
     collected_at:     datetime = Field(default_factory=datetime.utcnow)
+    notes:            Optional[str] = Field(default=None)
+    tags:             Optional[str] = Field(default=None)
 
 
 # ==============================================================================

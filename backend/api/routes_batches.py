@@ -93,10 +93,20 @@ def get_batches(active_only: bool = False, session: Session = Depends(get_sessio
             select(CollectionBatch).order_by(CollectionBatch.created_at.desc())
         ).all()
 
+    # Map batches to include live retrieved count
+    batch_list = []
+    for b in batches:
+        b_dict = b.model_dump()
+        retrieved_count = session.exec(
+            select(Lead).where((Lead.batch_id == b.batch_id) & (Lead.lead_status == "retrieved"))
+        ).all()
+        b_dict["retrieved_count"] = len(retrieved_count)
+        batch_list.append(b_dict)
+
     return {
         "status": "ok",
-        "count": len(batches),
-        "batches": batches
+        "count": len(batch_list),
+        "batches": batch_list
     }
 
 
@@ -116,10 +126,13 @@ def get_batch(batch_id: str, session: Session = Depends(get_session)):
         select(Lead).where(Lead.batch_id == batch_id)
     ).all()
 
+    retrieved_count = len([l for l in leads if l.lead_status == "retrieved"])
+
     return {
         "status": "ok",
         "batch": batch,
-        "actual_lead_count": len(leads)
+        "actual_lead_count": len(leads),
+        "retrieved_count": retrieved_count
     }
 
 

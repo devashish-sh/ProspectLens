@@ -100,6 +100,8 @@ def _build_export_rows(leads: list, session: Session) -> list[dict]:
             "Source":          lead.source_site,
             "Listing URL":     lead.listing_url     or "",
             "Lead Status":     lead.lead_status,
+            "Notes":           lead.notes           or "",
+            "Tags":            lead.tags            or "",
             "Collected At":    lead.collected_at.strftime("%Y-%m-%d %H:%M") if lead.collected_at else "",
         })
     return rows
