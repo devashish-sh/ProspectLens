@@ -314,6 +314,329 @@
   </div>
 
   <!-- ================================================================
+    SETTINGS VIEW (POPUP CONFIGURATIONS SETTINGS)
+  ================================================================ -->
+  <div id="settings-page-view" class="hidden" style="margin-top: 10px; padding: 0 12px; display: flex; flex-direction: column; gap: 8px; max-height: 395px; overflow-y: auto; padding-bottom: 80px; box-sizing: border-box;">
+    <div class="section-header" style="margin-bottom: 6px; padding: 0 2px;">
+      <span class="section-title">CONFIGURATIONS SETTINGS</span>
+    </div>
+
+    <!-- 1. GENERAL -->
+    <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
+      <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">⚙️ General</span>
+        <span class="chevron" style="font-size: 8px; color: var(--accent); transition: transform 0.2s;">▶</span>
+      </div>
+      <div class="settings-section-body hidden" style="padding: 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; font-size: 10px; color: var(--text-dark);">
+        <div class="settings-row">
+          <span>ProspectLens Version:</span>
+          <span style="color:#fff; font-weight:700;">v1.1.0</span>
+        </div>
+        <div class="settings-row">
+          <span>Extension Status:</span>
+          <span style="background:rgba(118, 165, 68, 0.15); color:var(--accent); padding:2px 6px; border-radius:4px; font-weight:700; font-size:8px;">🟢 Active</span>
+        </div>
+        <div class="settings-row">
+          <span>Engine Status:</span>
+          <span id="sett-engine-status" style="background:rgba(118, 165, 68, 0.15); color:var(--accent); padding:2px 6px; border-radius:4px; font-weight:700; font-size:8px;">🟢 Running</span>
+        </div>
+        <div class="settings-row">
+          <span>Local Database:</span>
+          <span id="sett-db-status" style="background:rgba(118, 165, 68, 0.15); color:var(--accent); padding:2px 6px; border-radius:4px; font-weight:700; font-size:8px;">🟢 Connected</span>
+        </div>
+        <div class="settings-row">
+          <span>Last Sync Time:</span>
+          <span id="sett-last-sync" style="color:#fff; font-weight:700;">—</span>
+        </div>
+        
+        <div style="display: flex; gap: 6px; margin-top: 4px;">
+          <button class="btn btn-ghost" id="btn-restart-engine" style="padding:4px 8px; font-size:9px; margin:0; flex:1;">Restart Engine</button>
+          <button class="btn btn-ghost" id="btn-check-updates" style="padding:4px 8px; font-size:9px; margin:0; flex:1;">Check Updates</button>
+          <button class="btn btn-ghost" id="btn-reset-session" style="padding:4px 8px; font-size:9px; margin:0; flex:1;">Reset Session</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. COLLECTION -->
+    <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
+      <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">📥 Collection</span>
+        <span class="chevron" style="font-size: 8px; color: var(--accent); transition: transform 0.2s;">▶</span>
+      </div>
+      <div class="settings-section-body hidden" style="padding: 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; font-size: 10px; color: var(--text-dark);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Default Mode:</span>
+          <select id="sett-default-mode" style="background:#111; border:1px solid #333; color:#fff; font-size:9px; padding:2px 4px; border-radius:3px;">
+            <option value="quick">Quick Collect</option>
+            <option value="deep">Deep Collect</option>
+          </select>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Auto Save Leads:</span>
+          <input type="checkbox" id="sett-auto-save" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Skip Duplicate Leads:</span>
+          <input type="checkbox" id="sett-skip-dupes" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Resume Interrupted Collect:</span>
+          <input type="checkbox" id="sett-resume-collect" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Concurrent Jobs Limit:</span>
+          <input type="number" id="sett-concurrency-jobs" value="5" min="1" max="10" style="background:#111; border:1px solid #333; color:#fff; font-size:9px; padding:2px 4px; width:40px; border-radius:3px;" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Collection Delay (s):</span>
+          <input type="number" id="sett-delay-jobs" value="3" min="1" max="10" style="background:#111; border:1px solid #333; color:#fff; font-size:9px; padding:2px 4px; width:40px; border-radius:3px;" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Auto Scroll Pages:</span>
+          <input type="checkbox" id="sett-auto-scroll" checked style="accent-color:var(--accent);" />
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. WEBSITE SUPPORT -->
+    <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
+      <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">🌍 Website Support</span>
+        <span class="chevron" style="font-size: 8px; color: var(--accent); transition: transform 0.2s;">▶</span>
+      </div>
+      <div class="settings-section-body hidden" style="padding: 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; font-size: 10px; color: var(--text-dark);">
+        <!-- Google Maps sub-card -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:14px;">🗺️</span>
+            <div style="display:flex; flex-direction:column; gap:1px;">
+              <span style="font-size:10px; font-weight:700; color:#fff;">Google Maps</span>
+              <span style="font-size:8px; color:var(--text-dark);">v1.2 • Compatibility: <span style="color:var(--accent);">🟢 High</span></span>
+            </div>
+          </div>
+          <input type="checkbox" checked style="accent-color:var(--accent); cursor:pointer;" />
+        </div>
+        <!-- IndiaMART sub-card -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:14px;">🏭</span>
+            <div style="display:flex; flex-direction:column; gap:1px;">
+              <span style="font-size:10px; font-weight:700; color:#fff;">IndiaMART</span>
+              <span style="font-size:8px; color:var(--text-dark);">v1.1 • Compatibility: <span style="color:var(--accent);">🟢 High</span></span>
+            </div>
+          </div>
+          <input type="checkbox" checked style="accent-color:var(--accent); cursor:pointer;" />
+        </div>
+        <!-- Justdial sub-card -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:14px;">📞</span>
+            <div style="display:flex; flex-direction:column; gap:1px;">
+              <span style="font-size:10px; font-weight:700; color:#fff;">Justdial</span>
+              <span style="font-size:8px; color:var(--text-dark);">v1.1 • Compatibility: <span style="color:var(--accent);">🟢 High</span></span>
+            </div>
+          </div>
+          <input type="checkbox" checked style="accent-color:var(--accent); cursor:pointer;" />
+        </div>
+        <!-- TradeIndia sub-card -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; opacity: 0.6;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:14px;">📦</span>
+            <div style="display:flex; flex-direction:column; gap:1px;">
+              <span style="font-size:10px; font-weight:700; color:#fff;">TradeIndia</span>
+              <span style="font-size:8px; color:var(--text-dark);">v1.0 • Compatibility: <span style="color:var(--accent);">🟡 Beta</span></span>
+            </div>
+          </div>
+          <input type="checkbox" style="accent-color:var(--accent); cursor:pointer;" />
+        </div>
+        <!-- Yellow Pages sub-card -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; opacity: 0.6;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:14px;">📂</span>
+            <div style="display:flex; flex-direction:column; gap:1px;">
+              <span style="font-size:10px; font-weight:700; color:#fff;">Yellow Pages</span>
+              <span style="font-size:8px; color:var(--text-dark);">v1.0 • Compatibility: <span style="color:var(--text-dark);">⚪ Soon</span></span>
+            </div>
+          </div>
+          <input type="checkbox" style="accent-color:var(--accent); cursor:pointer;" />
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. STORAGE -->
+    <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
+      <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">💾 Storage</span>
+        <span class="chevron" style="font-size: 8px; color: var(--accent); transition: transform 0.2s;">▶</span>
+      </div>
+      <div class="settings-section-body hidden" style="padding: 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; font-size: 10px; color: var(--text-dark);">
+        <div style="display: flex; justify-content: space-between;"><span>Total Leads:</span> <span id="sett-storage-leads" style="color:#fff; font-weight:700;">0</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>Database Size:</span> <span style="color:#fff; font-weight:700;">4.3 MB</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>Website Capsules:</span> <span id="sett-storage-capsules" style="color:#fff; font-weight:700;">4</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>Collection Sessions:</span> <span id="sett-storage-sessions" style="color:#fff; font-weight:700;">0</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>Directory URLs:</span> <span id="sett-storage-urls" style="color:#fff; font-weight:700;">0</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-ghost" id="btn-export-db" style="padding:4px 8px; font-size:9px; margin:0; flex:1;">Export DB</button>
+            <button class="btn btn-ghost" id="btn-import-db" style="padding:4px 8px; font-size:9px; margin:0; flex:1;">Import DB</button>
+            <button class="btn btn-ghost" id="btn-backup-db" style="padding:4px 8px; font-size:9px; margin:0; flex:1;">Backup DB</button>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-ghost" id="btn-clear-cache" style="padding:4px 8px; font-size:9px; margin:0; flex:1; color:#ea4335;">Clear Cache</button>
+            <button class="btn btn-danger" id="btn-reset-db" style="padding:4px 8px; font-size:9px; margin:0; flex:1; background:#ea4335; border:none; color:#fff;">Reset Database</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. DASHBOARD -->
+    <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
+      <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">📊 Dashboard</span>
+        <span class="chevron" style="font-size: 8px; color: var(--accent); transition: transform 0.2s;">▶</span>
+      </div>
+      <div class="settings-section-body hidden" style="padding: 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; font-size: 10px; color: var(--text-dark);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Auto Refresh Dashboard:</span>
+          <input type="checkbox" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Remember Table Filters:</span>
+          <input type="checkbox" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Default Sorting:</span>
+          <select style="background:#111; border:1px solid #333; color:#fff; font-size:9px; padding:2px 4px; border-radius:3px;">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="az">Name A-Z</option>
+          </select>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Default Page Size:</span>
+          <select style="background:#111; border:1px solid #333; color:#fff; font-size:9px; padding:2px 4px; border-radius:3px;">
+            <option value="25">25 Leads</option>
+            <option value="50" selected>50 Leads</option>
+            <option value="100">100 Leads</option>
+          </select>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Open Dashboard after Collect:</span>
+          <input type="checkbox" style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Open Capsule after Collect:</span>
+          <input type="checkbox" style="accent-color:var(--accent);" />
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. NOTIFICATIONS -->
+    <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
+      <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">🔔 Notifications</span>
+        <span class="chevron" style="font-size: 8px; color: var(--accent); transition: transform 0.2s;">▶</span>
+      </div>
+      <div class="settings-section-body hidden" style="padding: 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; font-size: 10px; color: var(--text-dark);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Collection Started:</span>
+          <input type="checkbox" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Collection Completed:</span>
+          <input type="checkbox" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Collection Failed:</span>
+          <input type="checkbox" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Duplicate Detection:</span>
+          <input type="checkbox" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Website Errors:</span>
+          <input type="checkbox" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Desktop Notifications:</span>
+          <input type="checkbox" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Sound Notifications:</span>
+          <input type="checkbox" checked style="accent-color:var(--accent);" />
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. APPEARANCE -->
+    <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
+      <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">🎨 Appearance</span>
+        <span class="chevron" style="font-size: 8px; color: var(--accent); transition: transform 0.2s;">▶</span>
+      </div>
+      <div class="settings-section-body hidden" style="padding: 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; font-size: 10px; color: var(--text-dark);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Enable Animations:</span>
+          <input type="checkbox" checked style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Compact Mode:</span>
+          <input type="checkbox" style="accent-color:var(--accent);" />
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Reduced Motion:</span>
+          <input type="checkbox" style="accent-color:var(--accent);" />
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. ABOUT ABOUT -->
+    <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
+      <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">ℹ️ About</span>
+        <span class="chevron" style="font-size: 8px; color: var(--accent); transition: transform 0.2s;">▶</span>
+      </div>
+      <div class="settings-section-body hidden" style="padding: 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; font-size: 10px; color: var(--text-dark);">
+        <div style="display: flex; justify-content: center; align-items: center; flex-direction: column; padding: 8px 0; gap: 4px;">
+          <span style="font-family:'Quicksand',sans-serif; font-size:15px; font-weight:700; color:#fff;">Prospect<span style="color:var(--accent);">Lens</span></span>
+          <span style="font-size: 8px; color:var(--text-dark);">B2B Lead Intelligence & Memory Center</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;"><span>Current Version:</span> <span style="color:#fff; font-weight:700;">1.1.0</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>Build Number:</span> <span style="color:#fff;">7762.1</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>Developer:</span> <span style="color:#fff;">Deepmind Pair Partner</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>License:</span> <span style="color:#fff;">MIT License</span></div>
+        <div style="border-top:1px solid #333; margin:4px 0;"></div>
+        <div style="display: flex; justify-content: space-between;"><span>Documentation:</span> <span style="color:var(--accent); cursor:pointer;">Future Option</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>Privacy Policy:</span> <span style="color:var(--accent); cursor:pointer;">Future Option</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>Release Notes:</span> <span style="color:var(--accent); cursor:pointer;">Future Option</span></div>
+      </div>
+    </div>
+
+    <!-- 9. DEVELOPER TOOLS (COLLAPSED BY DEFAULT) -->
+    <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
+      <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">🛠️ Developer Tools</span>
+        <span class="chevron" style="font-size: 8px; color: var(--accent); transition: transform 0.2s;">▶</span>
+      </div>
+      <div class="settings-section-body hidden" style="padding: 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; font-size: 10px; color: var(--text-dark);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <span>Enable Debug Logs:</span>
+          <input type="checkbox" id="sett-dev-debug" style="accent-color:var(--accent);" />
+        </div>
+        <button class="btn btn-ghost" id="dev-console-logs" style="padding:4px 8px; font-size:9px; margin:0; text-align:left; width:100%;">View Console Logs</button>
+        <button class="btn btn-ghost" id="dev-test-quick" style="padding:4px 8px; font-size:9px; margin:0; text-align:left; width:100%;">Test Quick Collect</button>
+        <button class="btn btn-ghost" id="dev-test-deep" style="padding:4px 8px; font-size:9px; margin:0; text-align:left; width:100%;">Test Deep Collect</button>
+        <button class="btn btn-ghost" id="dev-test-capsules" style="padding:4px 8px; font-size:9px; margin:0; text-align:left; width:100%;">Test Data Capsules</button>
+        <button class="btn btn-ghost" id="dev-clear-cache" style="padding:4px 8px; font-size:9px; margin:0; text-align:left; width:100%;">Clear Temporary Cache</button>
+        <button class="btn btn-ghost" id="dev-rebuild-db" style="padding:4px 8px; font-size:9px; margin:0; text-align:left; width:100%;">Rebuild Local Database</button>
+        <button class="btn btn-danger" id="dev-reset-state" style="padding:4px 8px; font-size:9px; margin:0; text-align:left; width:100%; background:#ea4335; border:none; color:#fff;">Reset Extension State</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================================================================
     BOTTOM NAVIGATION TAB BAR
   ================================================================ -->
   <footer class="bottom-nav">
