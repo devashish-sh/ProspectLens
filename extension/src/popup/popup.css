@@ -85,6 +85,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
 }
 
 /* Inline Animated Logo is fully styled inside HTML SVG defs */
@@ -606,7 +607,7 @@ body {
 /* ── BOTTOM NAVIGATION TAB BAR ── */
 .bottom-nav {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   background: var(--bg-dark);
   border-top: 1px solid var(--border);
   padding: 8px 4px;

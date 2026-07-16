@@ -492,14 +492,21 @@ async function init() {
 
   // Helper to open dashboard with a hash
   const openDashboard = (hash = "") => {
-    chrome.tabs.create({ url: chrome.runtime.getURL(`src/popup/pages/dashboard.html${hash}`) });
+    if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.create) {
+      chrome.tabs.create({ url: chrome.runtime.getURL(`src/popup/pages/dashboard.html${hash}`) });
+    } else {
+      window.open(`src/popup/pages/dashboard.html${hash}`, "_blank");
+    }
   };
 
   // View All button (recent activity section)
   document.getElementById("open-dashboard").addEventListener("click", () => openDashboard("#leads"));
 
-  // Bottom navigation tab bar items
-  document.getElementById("open-dashboard-leads").addEventListener("click", () => openDashboard("#leads"));
+  // Brand logo click handler (navigates to Dashboard)
+  const logoEl = document.querySelector(".logo");
+  if (logoEl) {
+    logoEl.addEventListener("click", () => openDashboard("#leads"));
+  }
   
   // Home button click listener
   document.getElementById("btn-home").addEventListener("click", () => {
