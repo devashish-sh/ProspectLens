@@ -466,3 +466,25 @@ class SearchContext(SQLModel, table=True):
     cancelled_at:        Optional[datetime] = Field(default=None)
     cancellation_reason: Optional[str] = Field(default=None)
     completion_status:   Optional[str] = Field(default=None)
+
+
+# ==============================================================================
+# TABLE 18 — Discovered Listings
+# Tracks DOM node mappings, viewport locations, and statuses of discovered listings.
+# ==============================================================================
+
+class DiscoveredListing(SQLModel, table=True):
+    __tablename__ = "discovered_listings"
+
+    discovered_id:       str      = Field(default_factory=generate_uuid, primary_key=True)
+    batch_id:            str      = Field(foreign_key="collection_batches.batch_id", index=True)
+    listing_id:          Optional[str] = Field(default=None, index=True)
+    temp_internal_id:    str      = Field(default_factory=generate_uuid, index=True)
+    website:             str      = Field(default="", index=True)
+    dom_reference:       str      = Field(default="", index=True)
+    listing_position:    int      = Field(default=0)
+    page_position:       int      = Field(default=0)
+    visible_state:       bool     = Field(default=True)
+    discovery_timestamp: datetime = Field(default_factory=datetime.utcnow)
+    discovery_source:    str      = Field(default="Quick Collect")
+    collection_status:   str      = Field(default="discovered") # discovered / processing / processed / failed / skipped

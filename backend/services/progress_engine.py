@@ -22,6 +22,7 @@ class CollectionProgressEngine:
         skipped_listings: int = None,
         enriched_leads: int = None,
         duplicate_leads: int = None,
+        successful_leads: int = None,
         current_listing: int = None,
         current_company_name: str = None,
         current_page: int = None,
@@ -57,6 +58,10 @@ class CollectionProgressEngine:
             batch.enriched_leads = enriched_leads
         if duplicate_leads is not None:
             batch.duplicate_leads = duplicate_leads
+        
+        if successful_leads is not None:
+            batch.total_leads_stored = successful_leads
+            batch.successful_records = successful_leads
 
         # Update current processing details
         if current_listing is not None:

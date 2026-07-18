@@ -455,6 +455,7 @@
           <div style="display: flex; gap: 8px; border-bottom: 1px solid #222; padding-bottom: 8px; margin-bottom: 12px;">
             <button class="btn btn-primary" id="btn-show-history" style="padding: 4px 10px; font-size: 11px; margin: 0; color: #000;">Collection History</button>
             <button class="btn btn-ghost" id="btn-show-urls" style="padding: 4px 10px; font-size: 11px; margin: 0;">Search Directory URLs</button>
+            <button class="btn btn-ghost" id="btn-show-review" style="padding: 4px 10px; font-size: 11px; margin: 0;">Review Queue</button>
           </div>
 
           <!-- SESSION HISTORY LIST -->
@@ -488,6 +489,35 @@
               </thead>
               <tbody id="detail-urls-tbody">
                 <tr><td colspan="4" class="tbl-empty">No directory URLs saved.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- REVIEW QUEUE LIST -->
+          <div id="detail-review-wrapper" class="tbl-wrap hidden" style="border: 1px solid #222; border-radius: 6px; padding: 0;">
+            <div id="review-bulk-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #111; border-bottom: 1px solid #222; font-size: 11px;">
+              <div>
+                <span id="review-selected-count">0</span> leads selected
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary" id="btn-bulk-approve" style="padding: 4px 8px; font-size: 10px; margin: 0; color: #000;">Approve Selected</button>
+                <button class="btn btn-danger" id="btn-bulk-reject" style="padding: 4px 8px; font-size: 10px; margin: 0; background: #ea4335; border: none; color: #fff;">Reject Selected</button>
+              </div>
+            </div>
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th style="width: 30px;"><input type="checkbox" id="review-select-all" /></th>
+                  <th>Business Name</th>
+                  <th>Phone</th>
+                  <th>Email</th>
+                  <th>Category</th>
+                  <th>City</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="detail-review-tbody">
+                <tr><td colspan="7" class="tbl-empty">No leads pending review.</td></tr>
               </tbody>
             </table>
           </div>

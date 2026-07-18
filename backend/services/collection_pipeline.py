@@ -1,7 +1,7 @@
 # backend/services/collection_pipeline.py
 # Centralized Data Collection Pipeline for ProspectLens
 
-from sqlmodel import Session, func
+from sqlmodel import Session, func, select
 from database.models import Lead, Contact, SourceRecord, CollectionBatch, DataCapsule, SearchHistory, LeadHistory
 from services.deduplication import compute_dedup_hash, is_duplicate_lead
 from services.gemini_service import normalize_lead_data
@@ -24,8 +24,12 @@ def calculate_lead_completeness(lead: Lead, contacts: list) -> float:
     if lead.primary_phone and lead.primary_phone.strip():
         has_phone = True
     elif contacts:
-        if any(c.contact_type == "phone" and c.contact_value.strip() for c in contacts):
-            has_phone = True
+        for c in contacts:
+            c_type = c.contact_type if hasattr(c, "contact_type") else c.get("contact_type")
+            c_val = c.contact_value if hasattr(c, "contact_value") else c.get("contact_value")
+            if c_type == "phone" and c_val and str(c_val).strip():
+                has_phone = True
+                break
     if has_phone:
         score += 12.5
         
@@ -34,8 +38,12 @@ def calculate_lead_completeness(lead: Lead, contacts: list) -> float:
     if lead.primary_email and lead.primary_email.strip():
         has_email = True
     elif contacts:
-        if any(c.contact_type == "email" and c.contact_value.strip() for c in contacts):
-            has_email = True
+        for c in contacts:
+            c_type = c.contact_type if hasattr(c, "contact_type") else c.get("contact_type")
+            c_val = c.contact_value if hasattr(c, "contact_value") else c.get("contact_value")
+            if c_type == "email" and c_val and str(c_val).strip():
+                has_email = True
+                break
     if has_email:
         score += 12.5
         
@@ -68,6 +76,9 @@ class CollectionPipeline:
         2. Are checked for duplication.
         3. Are saved with is_approved=False and lead_status="retrieved" (ensuring they only go to Data Capsules/User Review).
         """
+        # Debug Log: Lead ID
+        print(f"[DEBUG_AUDIT] Lead ID: '{lead_data.get('business_name')}' | Step 1: Validation & normalization started")
+        
         # Step 1: Normalize raw details using Gemini/local heuristics
         raw_lead_dict = {
             "business_name": lead_data.get("business_name", ""),
@@ -177,8 +188,11 @@ class CollectionPipeline:
         comp_score = calculate_lead_completeness(lead, lead_data.get("contacts", []))
         lead.completeness_score = comp_score
         lead.status = "Incomplete" if comp_score < 50.0 else "New"
+        
+        print(f"[DEBUG_AUDIT] Lead ID: '{lead.business_name}' | Step 2: Validation success (Completeness: {comp_score})")
         session.add(lead)
         session.flush()
+        print(f"[DEBUG_AUDIT] Lead ID: '{lead.business_name}' | Step 3: Database Save (flushed)")
 
         # Step 5: Save all contacts
         normalized_phone = normalized.get("phone")
@@ -250,6 +264,7 @@ class CollectionPipeline:
         VersionService.record_creation(session, lead)
 
         session.commit()
+        print(f"[DEBUG_AUDIT] Lead ID: '{lead.business_name}' | Step 4: Database transaction committed successfully")
         session.refresh(lead)
 
         # Publish internal event
@@ -265,8 +280,169 @@ class CollectionPipeline:
             "status": lead.status
         })
 
+        print(f"[DEBUG_AUDIT] Lead ID: '{lead.business_name}' | Step 5: Returned Status -> 'saved'")
         return {
             "status": "saved",
             "message": f"Lead '{lead.business_name}' saved via Pipeline successfully",
             "lead_id": lead.lead_id
+        }
+
+    @staticmethod
+    async def ingest_batch(
+        session: Session,
+        batch_id: str,
+        website: str,
+        raw_leads: list
+    ) -> dict:
+        """
+        Ingests a batch of leads sequentially through the centralized pipeline.
+        Updates progress engine and statistics after each lead, and handles duplicate/failure cases gracefully.
+        """
+        # Fetch batch
+        batch = session.get(CollectionBatch, batch_id)
+        if not batch:
+            return {"status": "error", "message": f"Session batch {batch_id} not found"}
+
+        from services.progress_engine import CollectionProgressEngine
+        from services.error_tracker import CollectionErrorTracker
+        from services.sync_service import SyncBroadcaster
+        from database.models import SearchContext
+
+        # Fetch search context for search_location mapping
+        search_ctx = session.exec(
+            select(SearchContext).where(SearchContext.batch_id == batch_id)
+        ).first()
+        search_loc = search_ctx.search_location if search_ctx else None
+
+        successful_count = 0
+        failed_count = 0
+        duplicate_count = 0
+        total_leads = len(raw_leads)
+
+        # Set total listings found if not already set or update it
+        if not batch.total_listings_found or batch.total_listings_found < total_leads:
+            batch.total_listings_found = total_leads
+            session.add(batch)
+            session.commit()
+
+        results = []
+
+        for idx, lead_item in enumerate(raw_leads):
+            # Prepare standard lead structure for ingest_lead
+            contacts = []
+            if lead_item.get("primary_phone"):
+                contacts.append({
+                    "contact_type": "phone",
+                    "contact_value": lead_item["primary_phone"],
+                    "sequence_number": 1,
+                    "source": "listing"
+                })
+            if lead_item.get("primary_email"):
+                contacts.append({
+                    "contact_type": "email",
+                    "contact_value": lead_item["primary_email"],
+                    "sequence_number": 1,
+                    "source": "listing"
+                })
+
+            lead_payload = {
+                "batch_id": batch_id,
+                "source_site": website,
+                "business_name": lead_item.get("business_name"),
+                "search_query": batch.search_query or "",
+                "service_name": lead_item.get("service_name") or lead_item.get("category"),
+                "contact_person": lead_item.get("contact_person"),
+                "website": lead_item.get("website"),
+                "address": lead_item.get("address"),
+                "city": lead_item.get("city") or search_loc,
+                "state": lead_item.get("state"),
+                "country": lead_item.get("country", "India"),
+                "postal_code": lead_item.get("postal_code"),
+                "category": lead_item.get("category"),
+                "listing_url": lead_item.get("listing_url"),
+                "collection_mode": batch.collection_mode or "quick",
+                "contacts": contacts,
+                "rating": lead_item.get("rating"),
+                "review_count": lead_item.get("review_count"),
+                "business_profile_url": lead_item.get("listing_url")
+            }
+
+            try:
+                ingest_res = await CollectionPipeline.ingest_lead(lead_payload, session)
+                status_val = ingest_res.get("status")
+                
+                print(f"[DEBUG_AUDIT] Lead ID: '{lead_item.get('business_name')}' | Step 6: Pipeline returned status -> '{status_val}'")
+
+                if status_val == "saved":
+                    successful_count += 1
+                    print(f"[DEBUG_AUDIT] Lead ID: '{lead_item.get('business_name')}' | Step 7: Batch Counter Increment -> 'successful_count': {successful_count}")
+                elif status_val == "duplicate":
+                    duplicate_count += 1
+                    print(f"[DEBUG_AUDIT] Lead ID: '{lead_item.get('business_name')}' | Step 7: Batch Counter Increment -> 'duplicate_count': {duplicate_count}")
+                else:
+                    failed_count += 1
+                    print(f"[DEBUG_AUDIT] Lead ID: '{lead_item.get('business_name')}' | Step 7: Batch Counter Increment -> 'failed_count': {failed_count} (Reason: {ingest_res.get('message')})")
+                    CollectionErrorTracker.log_error(
+                        session=session,
+                        batch_id=batch_id,
+                        website=website,
+                        error_category="Data Validation Error",
+                        error_message=ingest_res.get("message", "Unknown pipeline error"),
+                        current_url=lead_item.get("listing_url")
+                    )
+
+                results.append(ingest_res)
+
+            except Exception as e:
+                session.rollback() # Clear any failed SQL transaction states
+                failed_count += 1
+                print(f"[DEBUG_AUDIT] Lead ID: '{lead_item.get('business_name')}' | Step 7: Batch Counter Increment -> 'failed_count': {failed_count} (Pipeline Exception: {str(e)})")
+                CollectionErrorTracker.log_error(
+                    session=session,
+                    batch_id=batch_id,
+                    website=website,
+                    error_category="System Ingestion Error",
+                    error_message=f"Pipeline exception: {str(e)}",
+                    current_url=lead_item.get("listing_url")
+                )
+                results.append({
+                    "status": "error",
+                    "message": str(e),
+                    "lead_id": None
+                })
+
+            # Update progress engine after each processed lead
+            CollectionProgressEngine.update_progress(
+                session=session,
+                batch_id=batch_id,
+                listings_processed=idx + 1,
+                failed_listings=failed_count,
+                skipped_listings=duplicate_count,
+                duplicate_leads=duplicate_count,
+                successful_leads=successful_count,
+                current_listing=idx + 1,
+                current_company_name=lead_item.get("business_name"),
+                current_stage="ingesting"
+            )
+
+        # Broadcast final capsule/statistics updates
+        SyncBroadcaster.broadcast("STATE_UPDATED", {
+            "action": "CAPSULE_UPDATED",
+            "website": website,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        SyncBroadcaster.broadcast("STATE_UPDATED", {
+            "action": "STATISTICS_UPDATED",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+        print(f"[DEBUG_AUDIT] Finished Ingestion Batch: '{batch_id}' | Step 8: Final Session Statistics -> Total: {total_leads}, Successful: {successful_count}, Failed: {failed_count}, Duplicates: {duplicate_count}")
+
+        return {
+            "status": "success",
+            "total_processed": total_leads,
+            "successful": successful_count,
+            "failed": failed_count,
+            "duplicates": duplicate_count,
+            "results": results
         }

@@ -21,6 +21,7 @@ from database.db import get_session
 from database.models import CollectionBatch, Lead
 from services import event_bus
 from services.progress_engine import CollectionProgressEngine
+from services.session_manager import CollectionSessionManager
 
 router = APIRouter(tags=["Batches"])
 
@@ -52,34 +53,14 @@ class BatchUpdate(BaseModel):
 
 @router.post("/batches")
 def create_batch(batch_in: BatchIn, session: Session = Depends(get_session)):
-    batch = CollectionBatch(
-        batch_name=batch_in.batch_name or f"{batch_in.source_site} — {batch_in.search_query}",
-        search_query=batch_in.search_query,
-        source_site=batch_in.source_site,
-        collection_mode=batch_in.collection_mode,
-        started_at=datetime.utcnow(),
-        status="running",
-        search_url=batch_in.search_url,
-        total_listings_found=batch_in.total_listings_found or 0
-    )
-    session.add(batch)
-    session.commit()
-    session.refresh(batch)
-
-    # Ensure SearchContext is permanently created and linked to this batch session
-    from services.search_context_engine import SearchContextEngine
-    SearchContextEngine.create_search_context(
+    batch = CollectionSessionManager.create_session(
         session=session,
-        batch_id=batch.batch_id,
-        website=batch.source_site,
-        search_keyword=batch.search_query,
-        original_search_url=batch.search_url,
-        collection_mode=batch.collection_mode
+        source_site=batch_in.source_site,
+        search_query=batch_in.search_query,
+        collection_mode=batch_in.collection_mode,
+        search_url=batch_in.search_url,
+        batch_name=batch_in.batch_name
     )
-
-    # Publish internal event
-    event_bus.EventBus.publish(event_bus.COLLECTION_STARTED, batch=batch)
-
     return {
         "status": "ok",
         "message": "Batch created",
@@ -257,12 +238,44 @@ def update_batch_progress(
     }
 
 
+class SessionCompleteIn(BaseModel):
+    total_listings:   Optional[int] = None
+    successful_leads: Optional[int] = None
+    failed_listings:  Optional[int] = None
+    skipped_listings: Optional[int] = None
+    enriched_leads:   Optional[int] = None
+    duplicate_leads:  Optional[int] = None
+
+
+class SessionFailIn(BaseModel):
+    error_category:    str
+    error_message:     str
+    severity:          Optional[str] = "Error"
+    technical_details: Optional[str] = None
+    stack_trace:       Optional[str] = None
+
+
+class SessionStageIn(BaseModel):
+    stage: str
+
+
+@router.post("/batches/{batch_id}/start")
+def start_batch(batch_id: str, session: Session = Depends(get_session)):
+    """
+    Transitions the collection session state to Running.
+    """
+    batch = CollectionSessionManager.start_session(session, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
+    return {"status": "ok", "message": "Session started successfully", "batch": batch}
+
+
 @router.post("/batches/{batch_id}/pause")
 def pause_batch(batch_id: str, session: Session = Depends(get_session)):
     """
     Transitions the collection session status to Paused.
     """
-    batch = CollectionProgressEngine.update_progress(session, batch_id, status="paused")
+    batch = CollectionSessionManager.pause_session(session, batch_id)
     if not batch:
         raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
     return {"status": "ok", "message": "Session paused successfully", "batch": batch}
@@ -271,20 +284,86 @@ def pause_batch(batch_id: str, session: Session = Depends(get_session)):
 @router.post("/batches/{batch_id}/resume")
 def resume_batch(batch_id: str, session: Session = Depends(get_session)):
     """
-    Transitions the collection session status to Resumed.
+    Transitions the collection session status to Resumed and Running.
     """
-    batch = CollectionProgressEngine.update_progress(session, batch_id, status="resumed")
+    batch = CollectionSessionManager.resume_session(session, batch_id)
     if not batch:
         raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
     return {"status": "ok", "message": "Session resumed successfully", "batch": batch}
 
 
 @router.post("/batches/{batch_id}/cancel")
-def cancel_batch(batch_id: str, session: Session = Depends(get_session)):
+def cancel_batch(
+    batch_id: str,
+    reason: Optional[str] = None,
+    session: Session = Depends(get_session)
+):
     """
     Transitions the collection session status to Cancelled.
     """
-    batch = CollectionProgressEngine.update_progress(session, batch_id, status="cancelled")
+    batch = CollectionSessionManager.cancel_session(session, batch_id, reason=reason)
     if not batch:
         raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
     return {"status": "ok", "message": "Session cancelled successfully", "batch": batch}
+
+
+@router.post("/batches/{batch_id}/complete")
+def complete_batch(
+    batch_id: str,
+    payload: SessionCompleteIn,
+    session: Session = Depends(get_session)
+):
+    """
+    Transitions the session state to Completed, logs final metrics, and fires events.
+    """
+    batch = CollectionSessionManager.complete_session(
+        session=session,
+        batch_id=batch_id,
+        total_listings=payload.total_listings,
+        successful_leads=payload.successful_leads,
+        failed_listings=payload.failed_listings,
+        skipped_listings=payload.skipped_listings,
+        enriched_leads=payload.enriched_leads,
+        duplicate_leads=payload.duplicate_leads
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
+    return {"status": "ok", "message": "Session completed successfully", "batch": batch}
+
+
+@router.post("/batches/{batch_id}/fail")
+def fail_batch(
+    batch_id: str,
+    payload: SessionFailIn,
+    session: Session = Depends(get_session)
+):
+    """
+    Transitions the session state to Failed and logs the session execution error.
+    """
+    batch = CollectionSessionManager.fail_session(
+        session=session,
+        batch_id=batch_id,
+        error_category=payload.error_category,
+        error_message=payload.error_message,
+        severity=payload.severity,
+        technical_details=payload.technical_details,
+        stack_trace=payload.stack_trace
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
+    return {"status": "ok", "message": "Session marked as failed", "batch": batch}
+
+
+@router.post("/batches/{batch_id}/stage")
+def update_batch_stage(
+    batch_id: str,
+    payload: SessionStageIn,
+    session: Session = Depends(get_session)
+):
+    """
+    Updates the session stage context during execution.
+    """
+    batch = CollectionSessionManager.update_stage(session, batch_id, payload.stage)
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
+    return {"status": "ok", "message": "Stage updated successfully", "batch": batch}

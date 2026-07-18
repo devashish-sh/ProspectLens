@@ -109,7 +109,7 @@ async function loadStats() {
     const res  = await fetch(`${API_BASE}/leads/stats`);
     const data = await res.json();
 
-    document.getElementById("stat-total").textContent = data.total_leads ?? 0;
+    document.getElementById("stat-total").textContent = data.total_database_leads ?? 0;
     
     // Count active sources
     const activeSources = Object.keys(data.by_source || {}).filter(k => data.by_source[k] > 0).length;
@@ -121,7 +121,7 @@ async function loadStats() {
 
     const today = new Date().toISOString().split("T")[0];
     const todayCount = (batchData.batches || [])
-      .filter(b => b.created_at && b.created_at.startsWith(today))
+      .filter(b => b.started_at && b.started_at.startsWith(today))
       .reduce((sum, b) => sum + (b.successful_records || 0), 0);
 
     document.getElementById("stat-today").textContent = todayCount;
@@ -196,8 +196,8 @@ async function loadRecentBatches() {
       
       let lastUpdated = null;
       if (sourceBatches.length > 0) {
-        sourceBatches.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        lastUpdated = sourceBatches[0].created_at;
+        sourceBatches.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+        lastUpdated = sourceBatches[0].started_at;
       }
 
       const timeText = lastUpdated ? formatTimeAgo(lastUpdated) : "Waiting";
@@ -308,23 +308,21 @@ async function startCollection(site) {
 
       if (msg.action === "COLLECTION_COMPLETE") {
         progressFill.style.width = "100%";
+        chrome.runtime.onMessage.removeListener(progressListener);
+
+        const savedLeads = msg.saved;
+        const dupesLeads = msg.duplicates;
+
         if (currentMode === "deep") {
           progressText.textContent = "✅ Sweeper complete! Launching deep detail extractor in background...";
         } else {
-          progressText.textContent = `✅ Done — ${msg.saved} leads saved, ${msg.duplicates} duplicates skipped`;
+          progressText.textContent = `✅ Done — ${savedLeads} leads saved, ${dupesLeads} duplicates skipped`;
         }
-        chrome.runtime.onMessage.removeListener(progressListener);
 
-        // Update batch record with final counts
-        fetch(`${API_BASE}/batches/${batchId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            total_records:      msg.total,
-            successful_records: msg.saved,
-            failed_records:     msg.failed || 0
-          })
-        });
+        // Reload stats and batches
+        loadStats();
+        loadRecentBatches();
+        resetCollectButton();
 
         // If Deep Mode, trigger background Playwright worker
         if (currentMode === "deep") {
@@ -334,13 +332,6 @@ async function startCollection(site) {
             body: JSON.stringify({ batch_id: batchId, job_type: "deep_collect" })
           });
         }
-
-        // Reload stats and batches after 1 second
-        setTimeout(() => {
-          loadStats();
-          loadRecentBatches();
-          resetCollectButton();
-        }, 2000);
       }
 
       if (msg.action === "COLLECTION_ERROR") {
@@ -618,8 +609,8 @@ async function loadCapsulesLibrary() {
 
       let lastUpdated = null;
       if (sourceBatches.length > 0) {
-        sourceBatches.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        lastUpdated = sourceBatches[0].created_at;
+        sourceBatches.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+        lastUpdated = sourceBatches[0].started_at;
       } else {
         lastUpdated = localStorage.getItem(`prospectlens-last-active-${c.key}`) || null;
       }
@@ -823,7 +814,7 @@ async function loadSettingsLiveStats() {
   try {
     const res = await fetch(`${API_BASE}/leads/stats`);
     const stats = await res.json();
-    leadsEl.textContent = stats.total_leads ?? 0;
+    leadsEl.textContent = stats.total_database_leads ?? 0;
 
     const batchRes = await fetch(`${API_BASE}/batches`);
     const batchData = await batchRes.json();

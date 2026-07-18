@@ -26,6 +26,10 @@ from api.routes_navigation import router as navigation_router
 from api.routes_registry import router as registry_router
 from api.routes_errors   import router as errors_router
 from api.routes_searches import router as searches_router
+from api.routes_adapters import router as adapters_router
+from api.routes_discovery import router as discovery_router
+from api.routes_extraction import router as extraction_router
+from api.routes_ingestion import router as ingestion_router
 
 
 # ==============================================================================
@@ -86,6 +90,10 @@ app.include_router(navigation_router, prefix="/api")
 app.include_router(registry_router, prefix="/api")
 app.include_router(errors_router,   prefix="/api")
 app.include_router(searches_router, prefix="/api")
+app.include_router(adapters_router, prefix="/api")
+app.include_router(discovery_router, prefix="/api")
+app.include_router(extraction_router, prefix="/api")
+app.include_router(ingestion_router, prefix="/api")
 
 
 # ==============================================================================

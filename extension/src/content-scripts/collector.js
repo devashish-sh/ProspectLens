@@ -16,8 +16,7 @@ if (document.readyState === "complete") {
   });
 }
 
-const API_BASE = "http://localhost:8000/api";
-
+let currentBatchId = null;
 function filterUniqueCards(elements) {
   const arr = Array.from(elements);
   console.log("[ProspectLens] filterUniqueCards - Raw elements matched count:", arr.length);
@@ -59,6 +58,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // MAIN COLLECTION ROUTER
 // ============================================================
 async function runCollection(batchId, mode, site) {
+  currentBatchId = batchId;
   const url = window.location.href;
   
   // STEP 2 — VERIFY PAGE DETECTION
@@ -607,12 +607,14 @@ function extractContactsFromElement(element) {
 // SAVE LEAD TO BACKEND
 // ============================================================
 async function saveLead(lead) {
-  const res = await fetch(`${API_BASE}/leads`, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify(lead)
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({
+      action: "SAVE_LEAD",
+      lead: lead
+    }, (response) => {
+      resolve(response || { status: "error", message: "Failed to communicate with background service worker" });
+    });
   });
-  return await res.json();
 }
 
 // ============================================================
@@ -623,7 +625,14 @@ function sendProgress(done, total) {
 }
 
 function sendComplete(total, saved, duplicates, failed) {
-  chrome.runtime.sendMessage({ action: "COLLECTION_COMPLETE", total, saved, duplicates, failed });
+  chrome.runtime.sendMessage({
+    action: "COLLECTION_COMPLETE",
+    batch_id: currentBatchId,
+    total: total,
+    saved: saved,
+    duplicates: duplicates,
+    failed: failed
+  });
 }
 
 function sendError(message) {

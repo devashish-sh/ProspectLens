@@ -71,7 +71,7 @@ async function loadStats() {
     const res  = await fetch(`${API_BASE}/leads/stats`);
     const data = await res.json();
 
-    document.getElementById("dash-total").textContent     = data.total_leads ?? 0;
+    document.getElementById("dash-total").textContent     = data.total_database_leads ?? 0;
     document.getElementById("dash-new").textContent       = data.by_status?.new ?? 0;
     document.getElementById("dash-contacted").textContent = data.by_status?.contacted ?? 0;
     document.getElementById("dash-qualified").textContent = data.by_status?.qualified ?? 0;
@@ -128,8 +128,8 @@ async function updateDataCapsules(statsData) {
 
       let lastUpdated = null;
       if (sourceBatches.length > 0) {
-        sourceBatches.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        lastUpdated = sourceBatches[0].created_at;
+        sourceBatches.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+        lastUpdated = sourceBatches[0].started_at;
       } else {
         lastUpdated = localStorage.getItem(`prospectlens-last-active-${c.key}`) || null;
       }
@@ -187,6 +187,24 @@ async function openCapsuleWorkspace(sourceSite) {
   document.getElementById("capsules-grid-view").classList.add("hidden");
   document.getElementById("capsule-detail-view").classList.remove("hidden");
 
+  // Reset tab active state to Collection History
+  const btnShowHistory = document.getElementById("btn-show-history");
+  const btnShowUrls = document.getElementById("btn-show-urls");
+  const btnShowReview = document.getElementById("btn-show-review");
+  const historyWrapper = document.getElementById("detail-history-wrapper");
+  const urlsWrapper = document.getElementById("detail-urls-wrapper");
+  const reviewWrapper = document.getElementById("detail-review-wrapper");
+
+  btnShowHistory.className = "btn btn-primary";
+  btnShowHistory.style.color = "#000";
+  btnShowUrls.className = "btn btn-ghost";
+  btnShowUrls.style.color = "";
+  btnShowReview.className = "btn btn-ghost";
+  btnShowReview.style.color = "";
+  historyWrapper.classList.remove("hidden");
+  urlsWrapper.classList.add("hidden");
+  reviewWrapper.classList.add("hidden");
+
   // Fetch batches and refresh workspace stats/tables
   try {
     const batchRes = await fetch(`${API_BASE}/batches`);
@@ -220,11 +238,11 @@ async function refreshCapsuleWorkspace(sourceSite, batches) {
   
   // Filter batches for this capsule
   const sourceBatches = batches.filter(b => (b.source_site || "").toLowerCase().replace(/\s+/g, "") === sourceSite);
-  sourceBatches.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  sourceBatches.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
   
   let lastUpdated = null;
   if (sourceBatches.length > 0) {
-    lastUpdated = sourceBatches[0].created_at;
+    lastUpdated = sourceBatches[0].started_at;
   } else {
     lastUpdated = localStorage.getItem(`prospectlens-last-active-${sourceSite}`) || null;
   }
@@ -281,8 +299,8 @@ async function refreshCapsuleWorkspace(sourceSite, batches) {
     document.getElementById("cap-metric-pages").textContent = totalPages;
     document.getElementById("cap-metric-collected").textContent = totalCollected;
 
-    const firstDate = sourceBatches.length > 0 ? sourceBatches[sourceBatches.length - 1].created_at : lastUpdated;
-    const lastDate = sourceBatches.length > 0 ? sourceBatches[0].created_at : lastUpdated;
+    const firstDate = sourceBatches.length > 0 ? sourceBatches[sourceBatches.length - 1].started_at : lastUpdated;
+    const lastDate = sourceBatches.length > 0 ? sourceBatches[0].started_at : lastUpdated;
     document.getElementById("cap-metric-first").textContent = firstDate ? formatDate(firstDate).split(" ")[0] : "—";
     document.getElementById("cap-metric-last").textContent = lastDate ? formatDate(lastDate).split(" ")[0] : "—";
 
@@ -375,7 +393,7 @@ function renderSessionHistoryTable(sourceSite, sourceBatches, totalSessions) {
         <td>${escHtml(b.search_query || "—")}</td>
         <td>${pages} pages</td>
         <td>${b.successful_records} leads</td>
-        <td>${formatDate(b.created_at)}</td>
+        <td>${formatDate(b.started_at)}</td>
       </tr>
     `;
   }).join("");
@@ -419,7 +437,7 @@ function renderSearchURLsTable(sourceSite, sourceBatches, totalSessions) {
 
     return `
       <tr>
-        <td>${formatDate(b.created_at).split(" ")[0]}</td>
+        <td>${formatDate(b.started_at).split(" ")[0]}</td>
         <td>${escHtml(query)}</td>
         <td>
           <a href="${derivedUrl}" target="_blank" style="color:var(--accent); text-decoration:underline; font-size:10px; word-break:break-all;">
@@ -566,6 +584,167 @@ async function deleteCapsuleAction() {
   alert("Capsule run logs cleared successfully. Leads database records remain intact.");
   closeCapsuleWorkspace();
 }
+
+// ============================================================
+// REVIEW QUEUE & APPROVAL WORKFLOW
+// ============================================================
+async function loadReviewQueue() {
+  if (!currentSelectedCapsule) return;
+  const tbody = document.getElementById("detail-review-tbody");
+  tbody.innerHTML = `<tr><td colspan="7" class="table-loading">Loading unapproved leads...</td></tr>`;
+
+  // Reset checkboxes
+  document.getElementById("review-select-all").checked = false;
+  updateReviewSelectedCount();
+
+  try {
+    const res = await fetch(`${API_BASE}/capsules/${currentSelectedCapsule}/leads?limit=500`);
+    const data = await res.json();
+    const leads = data || [];
+
+    if (leads.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="tbl-empty">No leads pending review.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = leads.map(l => {
+      return `
+        <tr>
+          <td><input type="checkbox" class="review-row-checkbox" data-id="${l.lead_id}" /></td>
+          <td>
+            <a href="#" class="lead-link" onclick="openLeadModal('${l.lead_id}'); return false;" style="font-weight:700; color:var(--text); text-decoration:underline;">
+              ${escHtml(l.business_name)}
+            </a>
+          </td>
+          <td>${escHtml(l.phone || l.primary_phone || "—")}</td>
+          <td>${escHtml(l.email || "—")}</td>
+          <td>${escHtml(l.category || "—")}</td>
+          <td>${escHtml(l.city || "—")}</td>
+          <td>
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-ghost" onclick="approveSingleLeadAction('${l.lead_id}')" style="padding:4px 8px; font-size:10px; color:var(--accent); border:1px solid var(--accent); margin:0;">Approve</button>
+              <button class="btn btn-ghost" onclick="rejectSingleLeadAction('${l.lead_id}')" style="padding:4px 8px; font-size:10px; color:#ea4335; border:1px solid #ea4335; margin:0;">Reject</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    // Add checkbox change event listeners to update select all / count
+    document.querySelectorAll("#detail-review-tbody .review-row-checkbox").forEach(cb => {
+      cb.addEventListener("change", () => {
+        const checkboxes = document.querySelectorAll("#detail-review-tbody .review-row-checkbox");
+        const checked = document.querySelectorAll("#detail-review-tbody .review-row-checkbox:checked");
+        document.getElementById("review-select-all").checked = checkboxes.length === checked.length;
+        updateReviewSelectedCount();
+      });
+    });
+
+  } catch (err) {
+    console.error("Failed to load review queue:", err);
+    tbody.innerHTML = `<tr><td colspan="7" class="tbl-empty" style="color:#ff4444;">Failed to sync with local review database.</td></tr>`;
+  }
+}
+
+function updateReviewSelectedCount() {
+  const checked = document.querySelectorAll("#detail-review-tbody .review-row-checkbox:checked");
+  document.getElementById("review-selected-count").textContent = checked.length;
+}
+
+async function approveSingleLeadAction(leadId) {
+  try {
+    const res = await fetch(`${API_BASE}/leads/${leadId}/approve`, {
+      method: "POST"
+    });
+    if (!res.ok) throw new Error("Failed to approve");
+    
+    loadReviewQueue();
+    const batchRes = await fetch(`${API_BASE}/batches`);
+    const batchData = await batchRes.json();
+    const batches = batchData.batches || [];
+    refreshCapsuleWorkspace(currentSelectedCapsule, batches);
+    loadStats();
+  } catch (err) {
+    alert("Error approving lead: " + err.message);
+  }
+}
+
+async function rejectSingleLeadAction(leadId) {
+  if (!confirm("Are you sure you want to reject and delete this lead?")) return;
+  try {
+    const res = await fetch(`${API_BASE}/leads/${leadId}`, {
+      method: "DELETE"
+    });
+    if (!res.ok) throw new Error("Failed to delete");
+    
+    loadReviewQueue();
+    const batchRes = await fetch(`${API_BASE}/batches`);
+    const batchData = await batchRes.json();
+    const batches = batchData.batches || [];
+    refreshCapsuleWorkspace(currentSelectedCapsule, batches);
+    loadStats();
+  } catch (err) {
+    alert("Error rejecting lead: " + err.message);
+  }
+}
+
+async function approveSelectedLeadsAction() {
+  const checked = document.querySelectorAll("#detail-review-tbody .review-row-checkbox:checked");
+  if (checked.length === 0) {
+    alert("No leads selected.");
+    return;
+  }
+  const leadIds = Array.from(checked).map(cb => cb.getAttribute("data-id"));
+  
+  try {
+    const res = await fetch(`${API_BASE}/leads/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_ids: leadIds })
+    });
+    if (!res.ok) throw new Error("Failed to approve selected leads");
+    
+    loadReviewQueue();
+    const batchRes = await fetch(`${API_BASE}/batches`);
+    const batchData = await batchRes.json();
+    const batches = batchData.batches || [];
+    refreshCapsuleWorkspace(currentSelectedCapsule, batches);
+    loadStats();
+  } catch (err) {
+    alert("Error approving leads: " + err.message);
+  }
+}
+
+async function rejectSelectedLeadsAction() {
+  const checked = document.querySelectorAll("#detail-review-tbody .review-row-checkbox:checked");
+  if (checked.length === 0) {
+    alert("No leads selected.");
+    return;
+  }
+  if (!confirm(`Are you sure you want to reject and delete all ${checked.length} selected leads?`)) return;
+  
+  const leadIds = Array.from(checked).map(cb => cb.getAttribute("data-id"));
+  
+  try {
+    await Promise.all(leadIds.map(leadId => 
+      fetch(`${API_BASE}/leads/${leadId}`, { method: "DELETE" })
+    ));
+    
+    loadReviewQueue();
+    const batchRes = await fetch(`${API_BASE}/batches`);
+    const batchData = await batchRes.json();
+    const batches = batchData.batches || [];
+    refreshCapsuleWorkspace(currentSelectedCapsule, batches);
+    loadStats();
+  } catch (err) {
+    alert("Error rejecting leads: " + err.message);
+  }
+}
+
+// Expose review action handlers to global window context
+window.approveSingleLeadAction = approveSingleLeadAction;
+window.rejectSingleLeadAction  = rejectSingleLeadAction;
+window.loadReviewQueue         = loadReviewQueue;
 
 // ============================================================
 // LOAD ALL LEADS
@@ -1278,16 +1457,21 @@ async function init() {
   // Tab switcher in Capsule Detail
   const btnShowHistory = document.getElementById("btn-show-history");
   const btnShowUrls = document.getElementById("btn-show-urls");
+  const btnShowReview = document.getElementById("btn-show-review");
   const historyWrapper = document.getElementById("detail-history-wrapper");
   const urlsWrapper = document.getElementById("detail-urls-wrapper");
+  const reviewWrapper = document.getElementById("detail-review-wrapper");
 
   btnShowHistory.addEventListener("click", () => {
     btnShowHistory.className = "btn btn-primary";
     btnShowHistory.style.color = "#000";
     btnShowUrls.className = "btn btn-ghost";
     btnShowUrls.style.color = "";
+    btnShowReview.className = "btn btn-ghost";
+    btnShowReview.style.color = "";
     historyWrapper.classList.remove("hidden");
     urlsWrapper.classList.add("hidden");
+    reviewWrapper.classList.add("hidden");
   });
 
   btnShowUrls.addEventListener("click", () => {
@@ -1295,9 +1479,36 @@ async function init() {
     btnShowUrls.style.color = "#000";
     btnShowHistory.className = "btn btn-ghost";
     btnShowHistory.style.color = "";
+    btnShowReview.className = "btn btn-ghost";
+    btnShowReview.style.color = "";
     urlsWrapper.classList.remove("hidden");
     historyWrapper.classList.add("hidden");
+    reviewWrapper.classList.add("hidden");
   });
+
+  btnShowReview.addEventListener("click", () => {
+    btnShowReview.className = "btn btn-primary";
+    btnShowReview.style.color = "#000";
+    btnShowHistory.className = "btn btn-ghost";
+    btnShowHistory.style.color = "";
+    btnShowUrls.className = "btn btn-ghost";
+    btnShowUrls.style.color = "";
+    reviewWrapper.classList.remove("hidden");
+    historyWrapper.classList.add("hidden");
+    urlsWrapper.classList.add("hidden");
+    loadReviewQueue();
+  });
+
+  // Review Queue bulk checkboxes
+  document.getElementById("review-select-all").addEventListener("change", (e) => {
+    const checked = e.target.checked;
+    const checkboxes = document.querySelectorAll("#detail-review-tbody .review-row-checkbox");
+    checkboxes.forEach(cb => cb.checked = checked);
+    updateReviewSelectedCount();
+  });
+
+  document.getElementById("btn-bulk-approve").addEventListener("click", approveSelectedLeadsAction);
+  document.getElementById("btn-bulk-reject").addEventListener("click", rejectSelectedLeadsAction);
 
   // Leads filters live listeners
   let searchTimer;

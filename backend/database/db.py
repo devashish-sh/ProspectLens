@@ -1,7 +1,7 @@
 # backend/database/db.py
 # ProspectLens — SQLite Connection + Session Management + DB Initialization
 
-from sqlmodel import SQLModel, Session, create_engine, text
+from sqlmodel import SQLModel, Session, create_engine, text, select
 from pathlib import Path
 
 # ==============================================================================
@@ -40,7 +40,7 @@ def create_db_and_tables():
         ExportHistory, VisitedURL, SourceRecord,
         Note, User, Tag, LeadTag,
         WebsiteSource, DataCapsule, SearchHistory, LeadHistory,
-        LeadVersionHistory, CollectionError, SearchContext
+        LeadVersionHistory, CollectionError, SearchContext, DiscoveredListing
     )
     SQLModel.metadata.create_all(engine)
 
