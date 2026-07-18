@@ -97,6 +97,19 @@ class CollectionPipeline:
             address=addr or ""
         )
 
+        # Step 2.5: Verify capability and health status of the website source
+        source_site = lead_data.get("source_site", "")
+        mode = lead_data.get("collection_mode", "quick")
+        capability = "quick_collect" if mode == "quick" else "deep_collect"
+        
+        from services.health_monitor import WebsiteHealthMonitor
+        if not WebsiteHealthMonitor.is_capability_available(session, source_site, capability):
+            return {
+                "status": "error",
+                "message": f"Website source '{source_site}' is currently offline, disabled, or does not support collection mode '{mode}'",
+                "lead_id": None
+            }
+
         # Step 3: Deduplicate
         if is_duplicate_lead(dedup_hash, session):
             return {
@@ -231,6 +244,10 @@ class CollectionPipeline:
             changed_by="pipeline"
         )
         session.add(lead_history)
+
+        # Call Lead Versioning Service to log the creation event
+        from services.version_service import VersionService
+        VersionService.record_creation(session, lead)
 
         session.commit()
         session.refresh(lead)

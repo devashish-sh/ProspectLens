@@ -39,7 +39,8 @@ def create_db_and_tables():
         Lead, Contact, CollectionBatch, Job,
         ExportHistory, VisitedURL, SourceRecord,
         Note, User, Tag, LeadTag,
-        WebsiteSource, DataCapsule, SearchHistory, LeadHistory
+        WebsiteSource, DataCapsule, SearchHistory, LeadHistory,
+        LeadVersionHistory, CollectionError, SearchContext
     )
     SQLModel.metadata.create_all(engine)
 
@@ -48,7 +49,22 @@ def create_db_and_tables():
         ("icon_path", "TEXT"),
         ("adapter_key", "TEXT"),
         ("capabilities", "TEXT"),
-        ("collection_types", "TEXT")
+        ("collection_types", "TEXT"),
+        ("max_rpm", "INTEGER DEFAULT 60"),
+        ("recommended_delay", "REAL DEFAULT 1.0"),
+        ("retry_count", "INTEGER DEFAULT 3"),
+        ("timeout", "INTEGER DEFAULT 30"),
+        ("concurrent_limit", "INTEGER DEFAULT 5"),
+        ("current_health", "TEXT DEFAULT 'Healthy'"),
+        ("last_health_check_at", "DATETIME"),
+        ("last_success_at", "DATETIME"),
+        ("last_failure_at", "DATETIME"),
+        ("failure_count", "INTEGER DEFAULT 0"),
+        ("success_count", "INTEGER DEFAULT 0"),
+        ("avg_response_time", "REAL DEFAULT 0.0"),
+        ("consecutive_failures", "INTEGER DEFAULT 0"),
+        ("last_failure_reason", "TEXT"),
+        ("health_score", "INTEGER DEFAULT 100")
     ]
     
     with Session(engine) as session:
@@ -68,10 +84,10 @@ def create_db_and_tables():
     # Seed supported website sources and capsules if they don't exist
     with Session(engine) as session:
         sources_to_seed = [
-            ("googlemaps", "Google Maps", "https://www.google.com/maps", "/assets/icons/googlemaps.png", "GoogleMapsAdapter", '["leads", "ratings", "reviews"]', '["quick", "deep"]'),
-            ("indiamart", "IndiaMART", "https://www.indiamart.com", "/assets/icons/indiamart.png", "IndiaMartAdapter", '["leads", "contacts"]', '["quick"]'),
-            ("justdial", "Justdial", "https://www.justdial.com", "/assets/icons/justdial.png", "JustdialAdapter", '["leads", "ratings"]', '["quick", "deep"]'),
-            ("tradeindia", "TradeIndia", "https://www.tradeindia.com", "/assets/icons/tradeindia.png", "TradeIndiaAdapter", '["leads"]', '["quick"]')
+            ("googlemaps", "Google Maps", "https://www.google.com/maps", "/assets/icons/googlemaps.png", "GoogleMapsAdapter", '{"quick_collect": "supported", "deep_collect": "supported", "pagination": "supported", "infinite_scroll": "experimental", "email_extraction": "experimental", "phone_extraction": "supported", "website_extraction": "supported", "review_extraction": "supported", "coordinates": "supported", "categories": "supported", "business_hours": "supported", "social_links": "experimental", "images": "supported", "attachments": "unavailable"}', '["quick", "deep"]'),
+            ("indiamart", "IndiaMART", "https://www.indiamart.com", "/assets/icons/indiamart.png", "IndiaMartAdapter", '{"quick_collect": "supported", "deep_collect": "deprecated", "phone_extraction": "supported", "email_extraction": "unavailable", "attachments": "supported"}', '["quick"]'),
+            ("justdial", "Justdial", "https://www.justdial.com", "/assets/icons/justdial.png", "JustdialAdapter", '{"quick_collect": "supported", "deep_collect": "supported", "phone_extraction": "supported", "email_extraction": "experimental"}', '["quick", "deep"]'),
+            ("tradeindia", "TradeIndia", "https://www.tradeindia.com", "/assets/icons/tradeindia.png", "TradeIndiaAdapter", '{"quick_collect": "supported", "deep_collect": "disabled", "phone_extraction": "supported"}', '["quick"]')
         ]
         for key, display_name, base_url, icon_path, adapter_key, capabilities, collection_types in sources_to_seed:
             try:
@@ -84,7 +100,14 @@ def create_db_and_tables():
                         icon_path=icon_path,
                         adapter_key=adapter_key,
                         capabilities=capabilities,
-                        collection_types=collection_types
+                        collection_types=collection_types,
+                        max_rpm=60,
+                        recommended_delay=1.0,
+                        retry_count=3,
+                        timeout=30,
+                        concurrent_limit=5,
+                        current_health="Healthy",
+                        health_score=100
                     )
                     session.add(src)
                 else:
@@ -92,6 +115,9 @@ def create_db_and_tables():
                     existing.adapter_key = adapter_key
                     existing.capabilities = capabilities
                     existing.collection_types = collection_types
+                    if not existing.current_health:
+                        existing.current_health = "Healthy"
+                        existing.health_score = 100
                     session.add(existing)
             except Exception as e:
                 print(f"[DB] Seeding website source failed for {key}: {e}")
@@ -124,7 +150,8 @@ def create_db_and_tables():
         ("updated_at", "DATETIME"),
         ("reserved_field_1", "TEXT"),
         ("reserved_field_2", "TEXT"),
-        ("reserved_field_3", "TEXT")
+        ("reserved_field_3", "TEXT"),
+        ("version", "INTEGER DEFAULT 1")
     ]
     
     with Session(engine) as session:
@@ -152,7 +179,23 @@ def create_db_and_tables():
         ("total_listings_found", "INTEGER DEFAULT 0"),
         ("total_leads_stored", "INTEGER DEFAULT 0"),
         ("status", "TEXT DEFAULT 'running'"),
-        ("search_url", "TEXT")
+        ("search_url", "TEXT"),
+        ("last_updated_at", "DATETIME"),
+        ("listings_processed", "INTEGER DEFAULT 0"),
+        ("listings_remaining", "INTEGER DEFAULT 0"),
+        ("failed_listings", "INTEGER DEFAULT 0"),
+        ("skipped_listings", "INTEGER DEFAULT 0"),
+        ("enriched_leads", "INTEGER DEFAULT 0"),
+        ("duplicate_leads", "INTEGER DEFAULT 0"),
+        ("current_listing", "INTEGER DEFAULT 0"),
+        ("current_company_name", "TEXT"),
+        ("current_page", "INTEGER DEFAULT 1"),
+        ("current_stage", "TEXT"),
+        ("progress_percentage", "REAL DEFAULT 0.0"),
+        ("estimated_time_remaining", "REAL DEFAULT 0.0"),
+        ("listings_per_second", "REAL DEFAULT 0.0"),
+        ("avg_processing_time", "REAL DEFAULT 0.0"),
+        ("avg_listing_time", "REAL DEFAULT 0.0")
     ]
     
     with Session(engine) as session:

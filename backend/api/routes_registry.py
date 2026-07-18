@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from database.db import get_session
 from database.models import WebsiteSource, DataCapsule
+from services.health_monitor import WebsiteHealthMonitor
 
 router = APIRouter(tags=["Registry"])
 
@@ -101,4 +102,49 @@ def register_website(source_in: WebsiteSourceIn, session: Session = Depends(get_
         "status": "ok",
         "message": f"Website source '{source_in.display_name}' registered successfully",
         "website": new_source
+    }
+
+
+class HealthCheckIn(BaseModel):
+    success:        bool
+    response_time:  Optional[float] = None
+    failure_reason: Optional[str] = None
+
+
+@router.get("/registry/websites/{source_key}/health")
+def get_website_health(source_key: str, session: Session = Depends(get_session)):
+    """
+    Returns the dynamic health, config limits, and capability status profile of a website source.
+    """
+    profile = WebsiteHealthMonitor.get_source_profile(session, source_key)
+    if "error" in profile:
+        raise HTTPException(status_code=404, detail=profile["error"])
+    return {
+        "status": "ok",
+        "profile": profile
+    }
+
+
+@router.post("/registry/websites/{source_key}/health-check")
+def report_website_health_check(
+    source_key: str,
+    check: HealthCheckIn,
+    session: Session = Depends(get_session)
+):
+    """
+    Logs a health check result and updates rolling metrics and health status parameters.
+    """
+    profile = WebsiteHealthMonitor.record_check(
+        session=session,
+        source_key=source_key,
+        success=check.success,
+        response_time=check.response_time,
+        failure_reason=check.failure_reason
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail=f"Source key '{source_key}' not found")
+    return {
+        "status": "ok",
+        "message": "Health check logged and profile updated",
+        "profile": profile
     }

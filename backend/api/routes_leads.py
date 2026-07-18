@@ -11,18 +11,22 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlmodel import Session, select
+from sqlmodel import Session, select, delete
 from typing import Optional
 from datetime import datetime
 
 from database.db import get_session
-from database.models import Lead, Contact, SourceRecord
+from database.models import (
+    Lead, Contact, SourceRecord, Note, LeadHistory,
+    LeadVersionHistory, LeadTag, CollectionError
+)
 from services.deduplication import compute_dedup_hash, is_duplicate_lead, compute_url_hash
 from services.gemini_service import normalize_lead_data
 from services.collection_pipeline import CollectionPipeline, calculate_lead_completeness
 from services.sync_service import SyncBroadcaster
 from services import event_bus
 from services.statistics_service import StatisticsService
+from services.merge_confidence_engine import MergeConfidenceEngine
 from config import VALID_CAPSULE_STATUSES
 
 router = APIRouter(tags=["Leads"])
@@ -288,19 +292,14 @@ def delete_lead(lead_id: str, session: Session = Depends(get_session)):
     if not lead:
         raise HTTPException(status_code=404, detail=f"Lead {lead_id} not found")
 
-    # Delete all contacts first (foreign key dependency)
-    contacts = session.exec(
-        select(Contact).where(Contact.lead_id == lead_id)
-    ).all()
-    for contact in contacts:
-        session.delete(contact)
-
-    # Delete source records
-    source_records = session.exec(
-        select(SourceRecord).where(SourceRecord.lead_id == lead_id)
-    ).all()
-    for sr in source_records:
-        session.delete(sr)
+    # Bulk delete associated data to maintain database consistency and prevent orphan rows
+    session.exec(delete(Contact).where(Contact.lead_id == lead_id))
+    session.exec(delete(SourceRecord).where(SourceRecord.lead_id == lead_id))
+    session.exec(delete(Note).where(Note.lead_id == lead_id))
+    session.exec(delete(LeadHistory).where(LeadHistory.lead_id == lead_id))
+    session.exec(delete(LeadVersionHistory).where(LeadVersionHistory.lead_id == lead_id))
+    session.exec(delete(LeadTag).where(LeadTag.lead_id == lead_id))
+    session.exec(delete(CollectionError).where(CollectionError.lead_id == lead_id))
 
     session.delete(lead)
     session.commit()
@@ -347,17 +346,49 @@ def update_lead(lead_id: str, update: LeadUpdate, session: Session = Depends(get
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
-    if update.business_name is not None: lead.business_name = update.business_name
-    if update.category is not None: lead.category = update.category
-    if update.contact_person is not None: lead.contact_person = update.contact_person
-    if update.website is not None: lead.website = update.website
-    if update.address is not None: lead.address = update.address
-    if update.city is not None: lead.city = update.city
-    if update.state is not None: lead.state = update.state
-    if update.postal_code is not None: lead.postal_code = update.postal_code
-    if update.notes is not None: lead.notes = update.notes
-    if update.tags is not None: lead.tags = update.tags
-    if update.lead_status is not None: lead.lead_status = update.lead_status
+    modified_fields = []
+    
+    if update.business_name is not None and lead.business_name != update.business_name:
+        lead.business_name = update.business_name
+        modified_fields.append("business_name")
+    if update.category is not None and lead.category != update.category:
+        lead.category = update.category
+        modified_fields.append("category")
+    if update.contact_person is not None and lead.contact_person != update.contact_person:
+        lead.contact_person = update.contact_person
+        modified_fields.append("contact_person")
+    if update.website is not None and lead.website != update.website:
+        lead.website = update.website
+        modified_fields.append("website")
+    if update.address is not None and lead.address != update.address:
+        lead.address = update.address
+        modified_fields.append("address")
+    if update.city is not None and lead.city != update.city:
+        lead.city = update.city
+        modified_fields.append("city")
+    if update.state is not None and lead.state != update.state:
+        lead.state = update.state
+        modified_fields.append("state")
+    if update.postal_code is not None and lead.postal_code != update.postal_code:
+        lead.postal_code = update.postal_code
+        modified_fields.append("postal_code")
+    if update.notes is not None and lead.notes != update.notes:
+        lead.notes = update.notes
+        modified_fields.append("notes")
+    if update.tags is not None and lead.tags != update.tags:
+        lead.tags = update.tags
+        modified_fields.append("tags")
+    if update.lead_status is not None and lead.lead_status != update.lead_status:
+        lead.lead_status = update.lead_status
+        modified_fields.append("lead_status")
+        
+    new_phone = update.phone.strip() if (update.phone is not None and update.phone.strip()) else None
+    if update.phone is not None and lead.primary_phone != new_phone:
+        modified_fields.append("phone")
+
+    new_email = update.email.strip() if (update.email is not None and update.email.strip()) else None
+    if update.email is not None and lead.primary_email != new_email:
+        modified_fields.append("email")
     
     # Update primary phone
     if update.phone is not None:
@@ -395,9 +426,9 @@ def update_lead(lead_id: str, update: LeadUpdate, session: Session = Depends(get
             
     # Synchronize primary contact cache fields
     if update.phone is not None:
-        lead.primary_phone = update.phone.strip() if update.phone.strip() else None
+        lead.primary_phone = new_phone
     if update.email is not None:
-        lead.primary_email = update.email.strip() if update.email.strip() else None
+        lead.primary_email = new_email
 
     # Recalculate completeness score and update workflow metadata
     contacts = session.exec(select(Contact).where(Contact.lead_id == lead_id)).all()
@@ -406,7 +437,13 @@ def update_lead(lead_id: str, update: LeadUpdate, session: Session = Depends(get
         lead.status = "New"
     lead.updated_at = datetime.utcnow()
             
-    session.add(lead)
+    # Increment version and write history record if fields changed
+    if modified_fields:
+        from services.version_service import VersionService
+        VersionService.record_version(session, lead, "edited", modified_fields)
+    else:
+        session.add(lead)
+        
     session.commit()
 
     # Publish internal event
@@ -421,6 +458,23 @@ def update_lead(lead_id: str, update: LeadUpdate, session: Session = Depends(get
 
     return {"status": "ok", "message": "Lead updated successfully"}
 
+
+class CompareLeadsRequest(BaseModel):
+    lead_a_id: str
+    lead_b_id: str
+
+@router.post("/leads/compare")
+def compare_leads_endpoint(req: CompareLeadsRequest, session: Session = Depends(get_session)):
+    """
+    Compares two leads using the Merge Confidence Engine and returns the confidence profile.
+    """
+    lead_a = session.get(Lead, req.lead_a_id)
+    lead_b = session.get(Lead, req.lead_b_id)
+    if not lead_a or not lead_b:
+        raise HTTPException(status_code=404, detail="One or both leads not found")
+    return MergeConfidenceEngine.compare_leads(lead_a, lead_b)
+
+
 class ApproveLeadsRequest(BaseModel):
     lead_ids: Optional[list[str]] = None
     batch_id: Optional[str] = None
@@ -434,11 +488,12 @@ def approve_leads(req: ApproveLeadsRequest, session: Session = Depends(get_sessi
         # Approve specific leads
         statement = select(Lead).where(Lead.lead_id.in_(req.lead_ids))
         leads = session.exec(statement).all()
+        from services.version_service import VersionService
         for lead in leads:
             lead.is_approved = True
             lead.lead_status = "new"  # Set to main leads status
             lead.status = "Approved"
-            session.add(lead)
+            VersionService.record_version(session, lead, "approved", ["is_approved", "lead_status", "status"])
         session.commit()
         
         # Publish internal events
@@ -455,11 +510,12 @@ def approve_leads(req: ApproveLeadsRequest, session: Session = Depends(get_sessi
         # Approve all leads in a batch
         statement = select(Lead).where(Lead.batch_id == req.batch_id)
         leads = session.exec(statement).all()
+        from services.version_service import VersionService
         for lead in leads:
             lead.is_approved = True
             lead.lead_status = "new"
             lead.status = "Approved"
-            session.add(lead)
+            VersionService.record_version(session, lead, "approved", ["is_approved", "lead_status", "status"])
         session.commit()
         
         # Publish internal events
@@ -483,7 +539,8 @@ def approve_single_lead(lead_id: str, session: Session = Depends(get_session)):
     lead.is_approved = True
     lead.lead_status = "new"
     lead.status = "Approved"
-    session.add(lead)
+    from services.version_service import VersionService
+    VersionService.record_version(session, lead, "approved", ["is_approved", "lead_status", "status"])
     session.commit()
 
     # Publish internal event
@@ -510,16 +567,20 @@ def update_workflow_status(
     if update.status not in VALID_CAPSULE_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {VALID_CAPSULE_STATUSES}")
         
-    lead.status = update.status
-    
-    # Bridge with approval flags
-    if update.status in ["Approved", "Moved to Main Leads"]:
-        lead.is_approved = True
-        lead.lead_status = "new"
-    elif update.status == "Rejected":
-        lead.is_approved = False
+    if lead.status != update.status:
+        lead.status = update.status
+        # Bridge with approval flags
+        if update.status in ["Approved", "Moved to Main Leads"]:
+            lead.is_approved = True
+            lead.lead_status = "new"
+        elif update.status == "Rejected":
+            lead.is_approved = False
+            
+        from services.version_service import VersionService
+        VersionService.record_version(session, lead, "status_changed", ["status", "is_approved", "lead_status"])
+    else:
+        session.add(lead)
         
-    session.add(lead)
     session.commit()
     session.refresh(lead)
 
@@ -570,7 +631,8 @@ def promote_leads(req: PromoteLeadsRequest, session: Session = Depends(get_sessi
                 lead.lead_status = "new"
                 lead.is_approved = True
                 lead.status = "Approved"
-                session.add(lead)
+                from services.version_service import VersionService
+                VersionService.record_version(session, lead, "promoted", ["lead_status", "is_approved", "status"])
                 promoted_count += 1
                 
     session.commit()

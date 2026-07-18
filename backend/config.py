@@ -4,6 +4,21 @@
 # Supported website directories/scrapers
 SUPPORTED_WEBSITES = ["googlemaps", "indiamart", "justdial", "tradeindia"]
 
+# Merge Confidence Weights (must sum to 1.0)
+MERGE_CONFIDENCE_WEIGHTS = {
+    "company_name": 0.40,
+    "phone":        0.30,
+    "website":      0.15,
+    "location":     0.10,
+    "email":        0.05
+}
+
+# Merge Action Recommendation Thresholds (percentage)
+MERGE_ACTION_THRESHOLDS = {
+    "merge":  75.0,
+    "review": 40.0
+}
+
 # Valid workflow statuses for leads in review capsules
 VALID_CAPSULE_STATUSES = [
     "New",

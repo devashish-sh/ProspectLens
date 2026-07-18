@@ -24,6 +24,8 @@ from api.routes_capsules import router as capsules_router
 from api.routes_sync    import router as sync_router
 from api.routes_navigation import router as navigation_router
 from api.routes_registry import router as registry_router
+from api.routes_errors   import router as errors_router
+from api.routes_searches import router as searches_router
 
 
 # ==============================================================================
@@ -82,6 +84,8 @@ app.include_router(capsules_router, prefix="/api")
 app.include_router(sync_router,     prefix="/api")
 app.include_router(navigation_router, prefix="/api")
 app.include_router(registry_router, prefix="/api")
+app.include_router(errors_router,   prefix="/api")
+app.include_router(searches_router, prefix="/api")
 
 
 # ==============================================================================

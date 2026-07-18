@@ -68,6 +68,7 @@ class Lead(SQLModel, table=True):
     collected_at:     datetime = Field(default_factory=datetime.utcnow)
     notes:            Optional[str] = Field(default=None)
     tags:             Optional[str] = Field(default=None)
+    version:          int      = Field(default=1)
 
 
 # ==============================================================================
@@ -108,8 +109,30 @@ class CollectionBatch(SQLModel, table=True):
     completed_at:       Optional[datetime] = Field(default=None)
     total_listings_found: int      = Field(default=0)
     total_leads_stored: int      = Field(default=0)
-    status:             str      = Field(default="running", index=True) # running / completed / failed
+    status:             str      = Field(default="running", index=True) # running / completed / failed / paused / resumed / cancelled
     search_url:         Optional[str] = Field(default=None)
+    
+    # Real-Time Progress Metrics
+    last_updated_at:    datetime = Field(default_factory=datetime.utcnow)
+    listings_processed: int      = Field(default=0)
+    listings_remaining: int      = Field(default=0)
+    failed_listings:     int      = Field(default=0)
+    skipped_listings:    int      = Field(default=0)
+    enriched_leads:      int      = Field(default=0)
+    duplicate_leads:     int      = Field(default=0)
+    
+    # Processing state
+    current_listing:     int      = Field(default=0)
+    current_company_name: Optional[str] = Field(default=None)
+    current_page:        int      = Field(default=1)
+    current_stage:       Optional[str] = Field(default=None) # Scanning Listings, Opening Listing, Extracting Data, Saving Lead, Calculating Completeness, Updating Capsule
+    
+    # Calculations
+    progress_percentage: float    = Field(default=0.0)
+    estimated_time_remaining: float = Field(default=0.0) # In seconds
+    listings_per_second: float    = Field(default=0.0)
+    avg_processing_time: float    = Field(default=0.0) # In seconds per listing
+    avg_listing_time:    float    = Field(default=0.0) # In seconds per listing
     
     created_at:         datetime = Field(default_factory=datetime.utcnow)
 
@@ -255,8 +278,28 @@ class WebsiteSource(SQLModel, table=True):
     is_active:    bool     = Field(default=True)
     icon_path:    Optional[str] = Field(default=None)
     adapter_key:  Optional[str] = Field(default=None)
-    capabilities: Optional[str] = Field(default=None)                  # Stored as JSON string
-    collection_types: Optional[str] = Field(default=None)              # Stored as JSON string
+    capabilities: Optional[str] = Field(default=None)                  # Stored as JSON string dictionary
+    collection_types: Optional[str] = Field(default=None)              # Stored as JSON string list
+    
+    # Config limits per website source
+    max_rpm:             int      = Field(default=60)
+    recommended_delay:   float    = Field(default=1.0)
+    retry_count:         int      = Field(default=3)
+    timeout:             int      = Field(default=30)
+    concurrent_limit:    int      = Field(default=5)
+    
+    # Health monitoring status fields
+    current_health:       str      = Field(default="Healthy", index=True) # Healthy, Limited, Rate Limited, Captcha Detected, Blocked, Maintenance, Offline, Disabled, Unknown
+    last_health_check_at: Optional[datetime] = Field(default=None)
+    last_success_at:      Optional[datetime] = Field(default=None)
+    last_failure_at:      Optional[datetime] = Field(default=None)
+    failure_count:        int      = Field(default=0)
+    success_count:        int      = Field(default=0)
+    avg_response_time:    float    = Field(default=0.0)
+    consecutive_failures: int      = Field(default=0)
+    last_failure_reason:  Optional[str] = Field(default=None)
+    health_score:         int      = Field(default=100)
+    
     created_at:   datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -305,3 +348,121 @@ class LeadHistory(SQLModel, table=True):
     new_value:    Optional[str] = Field(default=None)
     changed_by:   Optional[str] = Field(default="system")
     created_at:   datetime = Field(default_factory=datetime.utcnow)
+
+
+# ==============================================================================
+# TABLE 15 — Lead Version History
+# Tracks every version iteration of a lead with modified fields list.
+# ==============================================================================
+
+class LeadVersionHistory(SQLModel, table=True):
+    __tablename__ = "lead_version_history"
+
+    version_history_id: str      = Field(default_factory=generate_uuid, primary_key=True)
+    lead_id:            str      = Field(foreign_key="leads.lead_id", index=True)
+    previous_version:   int      = Field(default=1)
+    new_version:        int      = Field(default=1)
+    action_type:        str      = Field(default="edited") # created / edited / enriched / status_changed
+    modified_fields:    Optional[str] = Field(default=None) # JSON string listing modified fields
+    created_at:         datetime = Field(default_factory=datetime.utcnow)
+
+
+# ==============================================================================
+# TABLE 16 — Collection Errors
+# Tracks all scraper, network, validation, and database errors during execution.
+# ==============================================================================
+
+class CollectionError(SQLModel, table=True):
+    __tablename__ = "collection_errors"
+
+    error_id:            str      = Field(default_factory=generate_uuid, primary_key=True)
+    batch_id:            str      = Field(foreign_key="collection_batches.batch_id", index=True) # Session ID
+    lead_id:             Optional[str] = Field(default=None, foreign_key="leads.lead_id", index=True, nullable=True)
+    website:             str      = Field(default="", index=True) # Website Source
+    collection_mode:     str      = Field(default="quick", index=True) # Collection Type
+    collection_stage:    str      = Field(default="") # Collection Stage
+    timestamp:           datetime = Field(default_factory=datetime.utcnow, index=True)
+    severity:            str      = Field(default="Error", index=True) # Info, Warning, Error, Critical, Fatal
+    error_category:      str      = Field(default="Unknown Error", index=True)
+    error_message:       str      = Field(default="")
+    technical_details:   Optional[str] = Field(default=None)
+    stack_trace:         Optional[str] = Field(default=None)
+    current_url:         Optional[str] = Field(default=None)
+    listing_url:         Optional[str] = Field(default=None)
+    search_url:          Optional[str] = Field(default=None)
+    page_number:         int      = Field(default=1)
+    listing_index:       int      = Field(default=0)
+    browser_info:        Optional[str] = Field(default=None) # JSON string
+    extension_version:   Optional[str] = Field(default=None)
+    backend_version:     Optional[str] = Field(default=None)
+    
+    # Recovery Fields
+    retry_recommended:   bool     = Field(default=False)
+    recovery_status:     str      = Field(default="pending") # pending / retried / resolved / failed
+    recovery_notes:      Optional[str] = Field(default=None)
+    max_retry_count:     int      = Field(default=3)
+    current_retry_count: int      = Field(default=0)
+    recovery_strategy:   Optional[str] = Field(default=None)
+
+
+# ==============================================================================
+# TABLE 17 — Search Context & Metadata
+# Permanent search parameters, result telemetry, and system execution contexts.
+# ==============================================================================
+
+class SearchContext(SQLModel, table=True):
+    __tablename__ = "search_contexts"
+
+    search_id:           str      = Field(default_factory=generate_uuid, primary_key=True)
+    batch_id:            str      = Field(foreign_key="collection_batches.batch_id", index=True, unique=True)
+    website:             str      = Field(default="", index=True)
+    search_keyword:      str      = Field(default="", index=True)
+    search_category:     Optional[str] = Field(default=None)
+    search_location:     Optional[str] = Field(default=None, index=True)
+    original_search_url: Optional[str] = Field(default=None)
+    applied_filters:     Optional[str] = Field(default=None) # JSON string
+    sorting_method:      Optional[str] = Field(default=None)
+    search_timestamp:    datetime = Field(default_factory=datetime.utcnow, index=True)
+    search_duration:     float    = Field(default=0.0) # in seconds
+    search_status:       str      = Field(default="pending", index=True) # pending / success / failed / cancelled
+    
+    # Search Configurations
+    collection_mode:     str      = Field(default="quick", index=True) # quick / deep
+    max_listings:        int      = Field(default=1000)
+    max_pages:           int      = Field(default=100)
+    delay_between_reqs:  float    = Field(default=1.0)
+    concurrency_limit:   int      = Field(default=5)
+    retry_policy:        Optional[str] = Field(default=None)
+    timeout:             int      = Field(default=30)
+    duplicate_strategy:  str      = Field(default="merge")
+    
+    # Search Result Metadata (copies / snapshots for historic query performance)
+    listings_found:      int      = Field(default=0)
+    listings_processed:  int      = Field(default=0)
+    successful_leads:    int      = Field(default=0)
+    failed_leads:        int      = Field(default=0)
+    skipped_leads:       int      = Field(default=0)
+    duplicate_leads:     int      = Field(default=0)
+    approved_leads:      int      = Field(default=0)
+    rejected_leads:      int      = Field(default=0)
+    avg_completeness:    float    = Field(default=0.0)
+    avg_speed:           float    = Field(default=0.0)
+    
+    # Website Context versions
+    website_version:     Optional[str] = Field(default=None)
+    layout_version:      Optional[str] = Field(default=None)
+    adapter_version:     Optional[str] = Field(default="1.0.0")
+    rules_version:       Optional[str] = Field(default="1.0.0")
+    extension_version:   Optional[str] = Field(default=None)
+    backend_version:     Optional[str] = Field(default="1.0.0")
+    
+    # Execution Context
+    started_by:          str      = Field(default="manual") # manual / scheduled / api / resume
+    
+    # Audit info
+    created_at:          datetime = Field(default_factory=datetime.utcnow)
+    updated_at:          datetime = Field(default_factory=datetime.utcnow)
+    completed_at:        Optional[datetime] = Field(default=None)
+    cancelled_at:        Optional[datetime] = Field(default=None)
+    cancellation_reason: Optional[str] = Field(default=None)
+    completion_status:   Optional[str] = Field(default=None)

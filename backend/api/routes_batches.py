@@ -20,6 +20,7 @@ from datetime import datetime
 from database.db import get_session
 from database.models import CollectionBatch, Lead
 from services import event_bus
+from services.progress_engine import CollectionProgressEngine
 
 router = APIRouter(tags=["Batches"])
 
@@ -64,6 +65,17 @@ def create_batch(batch_in: BatchIn, session: Session = Depends(get_session)):
     session.add(batch)
     session.commit()
     session.refresh(batch)
+
+    # Ensure SearchContext is permanently created and linked to this batch session
+    from services.search_context_engine import SearchContextEngine
+    SearchContextEngine.create_search_context(
+        session=session,
+        batch_id=batch.batch_id,
+        website=batch.source_site,
+        search_keyword=batch.search_query,
+        original_search_url=batch.search_url,
+        collection_mode=batch.collection_mode
+    )
 
     # Publish internal event
     event_bus.EventBus.publish(event_bus.COLLECTION_STARTED, batch=batch)
@@ -184,3 +196,95 @@ def update_batch(
         "message": "Batch updated",
         "batch": batch
     }
+
+
+class ProgressUpdateIn(BaseModel):
+    listings_processed:   Optional[int] = None
+    failed_listings:      Optional[int] = None
+    skipped_listings:     Optional[int] = None
+    enriched_leads:       Optional[int] = None
+    duplicate_leads:      Optional[int] = None
+    current_listing:      Optional[int] = None
+    current_company_name: Optional[str] = None
+    current_page:         Optional[int] = None
+    current_stage:        Optional[str] = None
+    status:               Optional[str] = None
+
+
+@router.get("/batches/{batch_id}/progress")
+def get_batch_progress(batch_id: str, session: Session = Depends(get_session)):
+    """
+    Exposes real-time collection metrics and current execution statistics for a session.
+    """
+    progress = CollectionProgressEngine.get_session_progress(session, batch_id)
+    if not progress:
+        raise HTTPException(status_code=404, detail=f"Session {batch_id} progress not found")
+    return {
+        "status": "ok",
+        "progress": progress
+    }
+
+
+@router.post("/batches/{batch_id}/progress")
+def update_batch_progress(
+    batch_id: str,
+    update: ProgressUpdateIn,
+    session: Session = Depends(get_session)
+):
+    """
+    Pushes real-time scraper progress updates and triggers speed/ETA recalculations.
+    """
+    batch = CollectionProgressEngine.update_progress(
+        session=session,
+        batch_id=batch_id,
+        listings_processed=update.listings_processed,
+        failed_listings=update.failed_listings,
+        skipped_listings=update.skipped_listings,
+        enriched_leads=update.enriched_leads,
+        duplicate_leads=update.duplicate_leads,
+        current_listing=update.current_listing,
+        current_company_name=update.current_company_name,
+        current_page=update.current_page,
+        current_stage=update.current_stage,
+        status=update.status
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
+    return {
+        "status": "ok",
+        "message": "Progress metrics updated successfully",
+        "batch": batch
+    }
+
+
+@router.post("/batches/{batch_id}/pause")
+def pause_batch(batch_id: str, session: Session = Depends(get_session)):
+    """
+    Transitions the collection session status to Paused.
+    """
+    batch = CollectionProgressEngine.update_progress(session, batch_id, status="paused")
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
+    return {"status": "ok", "message": "Session paused successfully", "batch": batch}
+
+
+@router.post("/batches/{batch_id}/resume")
+def resume_batch(batch_id: str, session: Session = Depends(get_session)):
+    """
+    Transitions the collection session status to Resumed.
+    """
+    batch = CollectionProgressEngine.update_progress(session, batch_id, status="resumed")
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
+    return {"status": "ok", "message": "Session resumed successfully", "batch": batch}
+
+
+@router.post("/batches/{batch_id}/cancel")
+def cancel_batch(batch_id: str, session: Session = Depends(get_session)):
+    """
+    Transitions the collection session status to Cancelled.
+    """
+    batch = CollectionProgressEngine.update_progress(session, batch_id, status="cancelled")
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Session {batch_id} not found")
+    return {"status": "ok", "message": "Session cancelled successfully", "batch": batch}
