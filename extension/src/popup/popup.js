@@ -540,6 +540,32 @@ async function init() {
   // Setup collapsible settings sections and actions
   setupSettingsInteractivity();
 
+  // Day/Night Theme Toggle Click Handler & Visual Sync
+  const themeToggleBtn = document.getElementById("theme-toggle");
+  const themeToggleIcon = themeToggleBtn?.querySelector(".theme-toggle-thumb-icon");
+  if (themeToggleBtn) {
+    const isLightTheme = document.documentElement.classList.contains("light-theme");
+    if (themeToggleIcon) {
+      themeToggleIcon.textContent = isLightTheme ? "☀️" : "🌙";
+    }
+
+    themeToggleBtn.addEventListener("click", () => {
+      const wasLightTheme = document.documentElement.classList.contains("light-theme");
+      const nextTheme = wasLightTheme ? "dark" : "light";
+      
+      if (nextTheme === "light") {
+        document.documentElement.classList.add("light-theme");
+        localStorage.setItem("prospectlens-theme", "light");
+        if (themeToggleIcon) themeToggleIcon.textContent = "☀️";
+      } else {
+        document.documentElement.classList.remove("light-theme");
+        localStorage.setItem("prospectlens-theme", "dark");
+        if (themeToggleIcon) themeToggleIcon.textContent = "🌙";
+      }
+      broadcastStateUpdate();
+    });
+  }
+
   // 10. Listen for real-time state updates from other views (e.g. dashboard)
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((message) => {

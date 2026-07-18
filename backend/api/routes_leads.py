@@ -19,6 +19,11 @@ from database.db import get_session
 from database.models import Lead, Contact, SourceRecord
 from services.deduplication import compute_dedup_hash, is_duplicate_lead, compute_url_hash
 from services.gemini_service import normalize_lead_data
+from services.collection_pipeline import CollectionPipeline, calculate_lead_completeness
+from services.sync_service import SyncBroadcaster
+from services import event_bus
+from services.statistics_service import StatisticsService
+from config import VALID_CAPSULE_STATUSES
 
 router = APIRouter(tags=["Leads"])
 
@@ -72,100 +77,9 @@ class LeadStatusUpdate(BaseModel):
 
 @router.post("/leads")
 async def create_lead(lead_in: LeadIn, session: Session = Depends(get_session)):
-
-    # Step 0 — Normalize raw details using Gemini/local heuristics
-    raw_lead_dict = {
-        "business_name": lead_in.business_name,
-        "address": lead_in.address,
-        "phone": lead_in.contacts[0].contact_value if lead_in.contacts else None,
-        "city": lead_in.city,
-        "state": lead_in.state,
-        "postal_code": lead_in.postal_code,
-        "contact_person": lead_in.contact_person,
-        "category": lead_in.category
-    }
-    normalized = await normalize_lead_data(raw_lead_dict)
-
-    # Use normalized values
-    biz_name = normalized.get("business_name", lead_in.business_name)
-    addr = normalized.get("address", lead_in.address)
-    city_val = normalized.get("city", lead_in.city)
-    state_val = normalized.get("state", lead_in.state)
-    pin_val = normalized.get("postal_code", lead_in.postal_code)
-    person_val = normalized.get("contact_person", lead_in.contact_person)
-    cat_val = normalized.get("category", lead_in.category)
-
-    # Step 1 — Compute dedup hash
-    dedup_hash = compute_dedup_hash(
-        business_name=biz_name,
-        source_site=lead_in.source_site,
-        address=addr or ""
-    )
-
-    # Step 2 — Check for duplicate
-    if is_duplicate_lead(dedup_hash, session):
-        return {
-            "status": "duplicate",
-            "message": f"Lead '{biz_name}' already exists — skipped",
-            "lead_id": None
-        }
-
-    # Step 3 — Create Lead record
-    lead = Lead(
-        batch_id=lead_in.batch_id,
-        search_query=lead_in.search_query,
-        source_site=lead_in.source_site,
-        business_name=biz_name,
-        service_name=lead_in.service_name,
-        contact_person=person_val,
-        website=lead_in.website,
-        address=addr,
-        city=city_val,
-        state=state_val,
-        country=lead_in.country,
-        postal_code=pin_val,
-        category=cat_val,
-        listing_url=lead_in.listing_url,
-        collection_mode=lead_in.collection_mode,
-        collection_status="partial" if lead_in.collection_mode == "deep" else "success",
-        lead_status="retrieved",
-        dedup_hash=dedup_hash
-    )
-    session.add(lead)
-    session.flush()     # Flush to get lead_id before saving contacts
-
-    # Step 4 — Save all contacts
-    # Standardize phone value in contacts if present
-    normalized_phone = normalized.get("phone")
-    for i, c in enumerate(lead_in.contacts):
-        c_val = c.contact_value
-        if c.contact_type == "phone" and i == 0 and normalized_phone:
-            c_val = normalized_phone
-        contact = Contact(
-            lead_id=lead.lead_id,
-            contact_type=c.contact_type,
-            contact_value=c_val,
-            sequence_number=c.sequence_number,
-            source=c.source
-        )
-        session.add(contact)
-
-    # Step 5 — Save source record (cross-platform tracking)
-    source_record = SourceRecord(
-        lead_id=lead.lead_id,
-        source_site=lead_in.source_site,
-        listing_url=lead_in.listing_url
-    )
-    session.add(source_record)
-
-    session.commit()
-    session.refresh(lead)
-
-    return {
-        "status": "saved",
-        "message": f"Lead '{lead.business_name}' saved successfully",
-        "lead_id": lead.lead_id
-    }
+    lead_dict = lead_in.model_dump()
+    result = await CollectionPipeline.ingest_lead(lead_dict, session)
+    return result
 
 
 # ==============================================================================
@@ -189,6 +103,7 @@ def get_leads(
     city:         Optional[str] = Query(None),
     batch_id:     Optional[str] = Query(None),
     search:       Optional[str] = Query(None),
+    approved:     Optional[bool] = Query(None),
     limit:        int           = Query(50, le=500),
     offset:       int           = Query(0),
     session:      Session       = Depends(get_session)
@@ -212,6 +127,15 @@ def get_leads(
         statement = statement.where(Lead.batch_id == batch_id)
     if search:
         statement = statement.where(Lead.business_name.contains(search))
+        
+    # Apply centralized approval filter
+    if approved is not None:
+        statement = statement.where(Lead.is_approved == approved)
+    else:
+        if batch_id:
+            statement = statement.where(Lead.is_approved == False)
+        else:
+            statement = statement.where(Lead.is_approved == True)
 
     # Order by most recently collected first
     statement = statement.order_by(Lead.collected_at.desc())
@@ -254,10 +178,10 @@ def get_leads(
 
 @router.get("/leads/stats")
 def get_lead_stats(session: Session = Depends(get_session)):
-    main_leads = session.exec(select(Lead).where(Lead.lead_status != "retrieved")).all()
+    main_leads = session.exec(select(Lead).where(Lead.is_approved == True)).all()
     all_leads = session.exec(select(Lead)).all()
 
-    total        = len(all_leads)
+    total        = len(main_leads)
     by_status    = {}
     by_source    = {}
     by_city      = {}
@@ -277,6 +201,14 @@ def get_lead_stats(session: Session = Depends(get_session)):
         "by_source":   by_source,
         "top_cities":  dict(sorted(by_city.items(), key=lambda x: x[1], reverse=True)[:10])
     }
+
+
+@router.get("/statistics")
+def get_global_statistics(session: Session = Depends(get_session)):
+    """
+    Exposes the dynamically calculated summary metrics from the StatisticsService.
+    """
+    return StatisticsService.get_summary_stats(session)
 
 
 # ==============================================================================
@@ -329,6 +261,15 @@ def update_lead_status(
     session.commit()
     session.refresh(lead)
 
+    # Publish internal event
+    event_bus.EventBus.publish(event_bus.LEAD_UPDATED, lead=lead)
+
+    SyncBroadcaster.broadcast("STATE_UPDATED", {
+        "action": "STATUS_UPDATED",
+        "lead_id": lead_id,
+        "lead_status": lead.lead_status
+    })
+
     return {
         "status": "ok",
         "message": f"Lead status updated to '{update.lead_status}'",
@@ -363,6 +304,14 @@ def delete_lead(lead_id: str, session: Session = Depends(get_session)):
 
     session.delete(lead)
     session.commit()
+
+    # Publish internal event
+    event_bus.EventBus.publish(event_bus.LEAD_DELETED, lead_id=lead_id)
+
+    SyncBroadcaster.broadcast("STATE_UPDATED", {
+        "action": "LEAD_DELETED",
+        "lead_id": lead_id
+    })
 
     return {
         "status": "ok",
@@ -444,9 +393,154 @@ def update_lead(lead_id: str, update: LeadUpdate, session: Session = Depends(get
         elif update.email.strip():
             session.add(Contact(lead_id=lead_id, contact_type="email", contact_value=update.email, sequence_number=1, source="editor"))
             
+    # Synchronize primary contact cache fields
+    if update.phone is not None:
+        lead.primary_phone = update.phone.strip() if update.phone.strip() else None
+    if update.email is not None:
+        lead.primary_email = update.email.strip() if update.email.strip() else None
+
+    # Recalculate completeness score and update workflow metadata
+    contacts = session.exec(select(Contact).where(Contact.lead_id == lead_id)).all()
+    lead.completeness_score = calculate_lead_completeness(lead, contacts)
+    if lead.status == "Incomplete" and lead.completeness_score >= 50.0:
+        lead.status = "New"
+    lead.updated_at = datetime.utcnow()
+            
     session.add(lead)
     session.commit()
+
+    # Publish internal event
+    event_bus.EventBus.publish(event_bus.LEAD_UPDATED, lead=lead)
+
+    SyncBroadcaster.broadcast("STATE_UPDATED", {
+        "action": "LEAD_UPDATED",
+        "lead_id": lead_id,
+        "completeness_score": lead.completeness_score,
+        "status": lead.status
+    })
+
     return {"status": "ok", "message": "Lead updated successfully"}
+
+class ApproveLeadsRequest(BaseModel):
+    lead_ids: Optional[list[str]] = None
+    batch_id: Optional[str] = None
+
+class WorkflowStatusUpdate(BaseModel):
+    status: str
+
+@router.post("/leads/approve")
+def approve_leads(req: ApproveLeadsRequest, session: Session = Depends(get_session)):
+    if req.lead_ids:
+        # Approve specific leads
+        statement = select(Lead).where(Lead.lead_id.in_(req.lead_ids))
+        leads = session.exec(statement).all()
+        for lead in leads:
+            lead.is_approved = True
+            lead.lead_status = "new"  # Set to main leads status
+            lead.status = "Approved"
+            session.add(lead)
+        session.commit()
+        
+        # Publish internal events
+        for lead in leads:
+            event_bus.EventBus.publish(event_bus.LEAD_APPROVED, lead=lead)
+        
+        SyncBroadcaster.broadcast("STATE_UPDATED", {
+            "action": "LEADS_APPROVED",
+            "lead_ids": req.lead_ids
+        })
+        
+        return {"status": "ok", "message": f"Approved {len(leads)} leads"}
+    elif req.batch_id:
+        # Approve all leads in a batch
+        statement = select(Lead).where(Lead.batch_id == req.batch_id)
+        leads = session.exec(statement).all()
+        for lead in leads:
+            lead.is_approved = True
+            lead.lead_status = "new"
+            lead.status = "Approved"
+            session.add(lead)
+        session.commit()
+        
+        # Publish internal events
+        for lead in leads:
+            event_bus.EventBus.publish(event_bus.LEAD_APPROVED, lead=lead)
+        
+        SyncBroadcaster.broadcast("STATE_UPDATED", {
+            "action": "BATCH_APPROVED",
+            "batch_id": req.batch_id
+        })
+        
+        return {"status": "ok", "message": f"Approved all {len(leads)} leads in batch {req.batch_id}"}
+    else:
+        raise HTTPException(status_code=400, detail="Must provide either lead_ids or batch_id")
+
+@router.post("/leads/{lead_id}/approve")
+def approve_single_lead(lead_id: str, session: Session = Depends(get_session)):
+    lead = session.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead.is_approved = True
+    lead.lead_status = "new"
+    lead.status = "Approved"
+    session.add(lead)
+    session.commit()
+
+    # Publish internal event
+    event_bus.EventBus.publish(event_bus.LEAD_APPROVED, lead=lead)
+
+    SyncBroadcaster.broadcast("STATE_UPDATED", {
+        "action": "LEAD_APPROVED",
+        "lead_id": lead_id,
+        "source_site": lead.source_site
+    })
+
+    return {"status": "ok", "message": "Lead approved", "lead_id": lead_id}
+
+@router.put("/leads/{lead_id}/workflow-status")
+def update_workflow_status(
+    lead_id: str,
+    update: WorkflowStatusUpdate,
+    session: Session = Depends(get_session)
+):
+    lead = session.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+        
+    if update.status not in VALID_CAPSULE_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {VALID_CAPSULE_STATUSES}")
+        
+    lead.status = update.status
+    
+    # Bridge with approval flags
+    if update.status in ["Approved", "Moved to Main Leads"]:
+        lead.is_approved = True
+        lead.lead_status = "new"
+    elif update.status == "Rejected":
+        lead.is_approved = False
+        
+    session.add(lead)
+    session.commit()
+    session.refresh(lead)
+
+    # Publish internal events depending on status changes
+    if lead.status == "Enriched":
+        event_bus.EventBus.publish(event_bus.LEAD_ENRICHED, lead=lead)
+    elif lead.status == "Approved":
+        event_bus.EventBus.publish(event_bus.LEAD_APPROVED, lead=lead)
+    elif lead.status == "Moved to Main Leads":
+        event_bus.EventBus.publish(event_bus.LEAD_MOVED, lead=lead)
+    else:
+        event_bus.EventBus.publish(event_bus.LEAD_UPDATED, lead=lead)
+
+    SyncBroadcaster.broadcast("STATE_UPDATED", {
+        "action": "WORKFLOW_STATUS_UPDATED",
+        "lead_id": lead_id,
+        "status": lead.status,
+        "is_approved": lead.is_approved
+    })
+
+    return {"status": "ok", "message": f"Lead workflow status updated to '{update.status}'", "lead_id": lead_id}
 
 @router.post("/leads/promote")
 def promote_leads(req: PromoteLeadsRequest, session: Session = Depends(get_session)):
@@ -474,8 +568,23 @@ def promote_leads(req: PromoteLeadsRequest, session: Session = Depends(get_sessi
                 session.delete(lead)
             else:
                 lead.lead_status = "new"
+                lead.is_approved = True
+                lead.status = "Approved"
                 session.add(lead)
                 promoted_count += 1
                 
     session.commit()
+
+    # Publish internal events for promoted leads
+    for lead_id in req.lead_ids:
+        lead = session.get(Lead, lead_id)
+        if lead and lead.is_approved:
+            event_bus.EventBus.publish(event_bus.LEAD_APPROVED, lead=lead)
+
+    SyncBroadcaster.broadcast("STATE_UPDATED", {
+        "action": "LEADS_PROMOTED",
+        "lead_ids": req.lead_ids,
+        "count": promoted_count
+    })
+
     return {"status": "ok", "message": f"{promoted_count} leads promoted to main collection"}

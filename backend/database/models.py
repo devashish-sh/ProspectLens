@@ -39,6 +39,31 @@ class Lead(SQLModel, table=True):
     collection_mode:  str      = Field(default="quick")             # quick / deep
     collection_status: str     = Field(default="success")           # success / partial / failed
     lead_status:      str      = Field(default="new", index=True)   # new / contacted / qualified / closed
+    is_approved:      bool     = Field(default=False, index=True)   # review flow state
+    status:           str      = Field(default="New", index=True)   # New / Incomplete / Enriched / Reviewed / Approved / Moved to Main Leads / Rejected / Duplicate / Needs Review
+    
+    # Contact Information Cache
+    primary_email:    Optional[str] = Field(default=None)
+    primary_phone:    Optional[str] = Field(default=None)
+
+    # Business Information
+    review_count:     Optional[int] = Field(default=None)
+    rating:           Optional[float] = Field(default=None)
+    business_profile_url: Optional[str] = Field(default=None)
+
+    # Collection Information
+    directory_search_url: Optional[str] = Field(default=None)
+
+    # Workflow & Metadata
+    completeness_score: float  = Field(default=0.0)
+    created_at:       datetime = Field(default_factory=datetime.utcnow)
+    updated_at:       datetime = Field(default_factory=datetime.utcnow)
+    
+    # Reserved Fields
+    reserved_field_1: Optional[str] = Field(default=None)
+    reserved_field_2: Optional[str] = Field(default=None)
+    reserved_field_3: Optional[str] = Field(default=None)
+
     dedup_hash:       str      = Field(default="", index=True)      # SHA-256 fingerprint (unique key)
     collected_at:     datetime = Field(default_factory=datetime.utcnow)
     notes:            Optional[str] = Field(default=None)
@@ -77,6 +102,15 @@ class CollectionBatch(SQLModel, table=True):
     total_records:      int      = Field(default=0)             # Total listings found on page
     successful_records: int      = Field(default=0)             # Listings successfully saved
     failed_records:     int      = Field(default=0)             # Listings that failed to extract
+    
+    # Collection Session Fields
+    started_at:         datetime = Field(default_factory=datetime.utcnow)
+    completed_at:       Optional[datetime] = Field(default=None)
+    total_listings_found: int      = Field(default=0)
+    total_leads_stored: int      = Field(default=0)
+    status:             str      = Field(default="running", index=True) # running / completed / failed
+    search_url:         Optional[str] = Field(default=None)
+    
     created_at:         datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -204,3 +238,70 @@ class LeadTag(SQLModel, table=True):
     lead_tag_id: str = Field(default_factory=generate_uuid, primary_key=True)
     lead_id:     str = Field(foreign_key="leads.lead_id", index=True)
     tag_id:      str = Field(foreign_key="tags.tag_id", index=True)
+
+
+# ==============================================================================
+# TABLE 11 — Website Sources
+# Explicit metadata and statuses of supported source directories.
+# ==============================================================================
+
+class WebsiteSource(SQLModel, table=True):
+    __tablename__ = "website_sources"
+
+    source_id:    str      = Field(default_factory=generate_uuid, primary_key=True)
+    source_key:   str      = Field(default="", index=True, unique=True) # e.g. "googlemaps"
+    display_name: str      = Field(default="")                          # e.g. "Google Maps"
+    base_url:     Optional[str] = Field(default=None)
+    is_active:    bool     = Field(default=True)
+    icon_path:    Optional[str] = Field(default=None)
+    adapter_key:  Optional[str] = Field(default=None)
+    capabilities: Optional[str] = Field(default=None)                  # Stored as JSON string
+    collection_types: Optional[str] = Field(default=None)              # Stored as JSON string
+    created_at:   datetime = Field(default_factory=datetime.utcnow)
+
+
+# ==============================================================================
+# TABLE 12 — Data Capsules
+# Website-specific review capsules/storage rooms metadata.
+# ==============================================================================
+
+class DataCapsule(SQLModel, table=True):
+    __tablename__ = "data_capsules"
+
+    capsule_id:        str      = Field(default_factory=generate_uuid, primary_key=True)
+    source_site:       str      = Field(default="", index=True, unique=True) # links to source_key
+    is_locked:         bool     = Field(default=False)
+    last_sync_at:      Optional[datetime] = Field(default=None)
+    total_leads_count: int      = Field(default=0)
+
+
+# ==============================================================================
+# TABLE 13 — Search History
+# Comprehensive log of all directory searches made by the user.
+# ==============================================================================
+
+class SearchHistory(SQLModel, table=True):
+    __tablename__ = "search_history"
+
+    search_id:           str      = Field(default_factory=generate_uuid, primary_key=True)
+    search_query:        str      = Field(default="", index=True)
+    source_site:         str      = Field(default="", index=True)
+    total_results_found: int      = Field(default=0)
+    searched_at:         datetime = Field(default_factory=datetime.utcnow)
+
+
+# ==============================================================================
+# TABLE 14 — Lead History (Workflow Audit Logs)
+# Keeps track of all lead actions (collections, edits, status updates, approvals).
+# ==============================================================================
+
+class LeadHistory(SQLModel, table=True):
+    __tablename__ = "lead_history"
+
+    history_id:   str      = Field(default_factory=generate_uuid, primary_key=True)
+    lead_id:      str      = Field(foreign_key="leads.lead_id", index=True)
+    action_type:  str      = Field(default="collected", index=True) # collected / edited / status_changed / approved / rejected
+    old_value:    Optional[str] = Field(default=None)
+    new_value:    Optional[str] = Field(default=None)
+    changed_by:   Optional[str] = Field(default="system")
+    created_at:   datetime = Field(default_factory=datetime.utcnow)

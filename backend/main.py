@@ -20,6 +20,10 @@ from api.routes_leads   import router as leads_router
 from api.routes_batches import router as batches_router
 from api.routes_export  import router as export_router
 from api.routes_jobs    import router as jobs_router
+from api.routes_capsules import router as capsules_router
+from api.routes_sync    import router as sync_router
+from api.routes_navigation import router as navigation_router
+from api.routes_registry import router as registry_router
 
 
 # ==============================================================================
@@ -74,6 +78,10 @@ app.include_router(leads_router,    prefix="/api")
 app.include_router(batches_router,  prefix="/api")
 app.include_router(export_router,   prefix="/api")
 app.include_router(jobs_router,     prefix="/api")
+app.include_router(capsules_router, prefix="/api")
+app.include_router(sync_router,     prefix="/api")
+app.include_router(navigation_router, prefix="/api")
+app.include_router(registry_router, prefix="/api")
 
 
 # ==============================================================================

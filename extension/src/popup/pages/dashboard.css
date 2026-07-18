@@ -31,7 +31,7 @@
   
   --r:            12px;                       /* Cards Border Radius */
   --r-inner:      8px;                        /* Inner Elements Radius */
-  --sidebar:      200px;
+  --sidebar:      230px;
   --transition:   all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --glass-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.65);
   --font-family:  'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -92,7 +92,7 @@ body {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  padding: 24px 0 16px;
+  padding: 10px 0 16px;
   position: fixed;
   top: 0;
   left: 0;
@@ -102,10 +102,14 @@ body {
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 20px 20px;
+  /* gap: 8px; */
+  justify-content: center;   /* Center the logo */
+  padding: 12px 16px 16px;   /* More breathing room */
   border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  /* padding: 0 8px 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px; */
 }
 
 /* Inline Animated Logo is fully styled inside HTML SVG defs */
@@ -851,4 +855,241 @@ input[type="checkbox"] {
   border-radius: 4px;
   border: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.3);
+}
+
+/* ── LIGHT MODE BRANDING REFINEMENTS ── */
+html.light-theme {
+  --bg:           #F6F8FB;                    /* Main Background */
+  --bg-sidebar:   #FCFCFD;                    /* Solid Dark Sidebar */
+  --panel-bg:     #FFFFFF;                    /* Primary Cards Background */
+  --panel-hover:  #F6F8FB;                    /* Hover Surface */
+  --card-bg:      #FFFFFF;                    /* Solid Card Background */
+  --accent:       #5FA84E;                    /* Primary Accent Green */
+  --accent-low:   rgba(95, 168, 78, 0.08);
+  --accent-mid:   #EAF6E6;                    /* Accent Background */
+  --accent-bdr:   rgba(95, 168, 78, 0.25);
+  --btn-primary:         #5FA84E;             /* Button Green Accent */
+  --btn-primary-hover:   #4F9441;             /* Dark Accent */
+  --btn-primary-pressed: #3F7F33;             /* Hover/Pressed */
+  --text:         #1E293B;                    /* Primary Text */
+  --text-muted:   #64748B;                    /* Secondary Text */
+  --text-dark:    #94A3B8;                    /* Muted Labels / Text */
+  --border:       #E6EBF1;                    /* Border */
+  --danger:       #DC2626;                    /* Error */
+  --danger-low:   rgba(220, 38, 38, 0.08);
+  --warn:         #D97706;                    /* Warning */
+  --warn-low:     rgba(217, 119, 6, 0.08);
+  --info:         #3B82F6;                    /* Information */
+  --info-low:     rgba(59, 130, 246, 0.08);
+  --purple:       #7C3AED;                    /* Muted Purple */
+  --purple-low:   rgba(124, 58, 237, 0.08);
+  --blue:         #3B82F6;                    /* Primary Blue */
+  --blue-low:     rgba(59, 130, 246, 0.08);
+  --blue-bg:      #EFF6FF;                    /* Secondary Surface / Background Blue */
+}
+
+html.light-theme body {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+/* Sidebar */
+html.light-theme .sidebar {
+  background: var(--bg-sidebar) !important;
+  border-right: 1px solid var(--border) !important;
+  box-shadow: 4px 0 24px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light-theme .sidebar-brand {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+html.light-theme .sidebar-foot {
+  border-top: 1px solid var(--border) !important;
+}
+
+/* Nav Links */
+html.light-theme .nav-link {
+  color: var(--text-muted) !important;
+}
+
+html.light-theme .nav-link:hover {
+  background: var(--panel-hover) !important;
+  color: var(--text) !important;
+}
+
+html.light-theme .nav-link.active {
+  background: var(--accent-mid) !important;
+  color: var(--btn-primary) !important;
+  border-color: var(--accent-bdr) !important;
+  box-shadow: 0 4px 12px rgba(95, 168, 78, 0.08) !important;
+}
+
+/* Main Area */
+html.light-theme .main-header {
+  border-bottom: 1px solid var(--border) !important;
+  background: var(--bg-sidebar) !important;
+}
+
+html.light-theme .main-title {
+  color: var(--text) !important;
+}
+
+/* Cards & Stats */
+html.light-theme .card,
+html.light-theme .export-card {
+  background: var(--panel-bg) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
+  transition: var(--transition) !important;
+}
+
+html.light-theme .card:hover,
+html.light-theme .export-card:hover {
+  border-color: var(--accent-bdr) !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.10) !important;
+  background: var(--panel-hover) !important;
+}
+
+html.light-theme .card-num {
+  color: var(--accent) !important;
+  text-shadow: none !important;
+}
+
+html.light-theme .card-lbl {
+  color: var(--text-muted) !important;
+}
+
+/* Inputs & Filters */
+html.light-theme .f-input,
+html.light-theme .f-select {
+  background: #FFFFFF !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light-theme .f-input::placeholder {
+  color: var(--text-dark) !important;
+}
+
+html.light-theme .f-input:focus,
+html.light-theme .f-select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(95, 168, 78, 0.15), 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* Tables */
+html.light-theme .tbl-wrap {
+  background: var(--panel-bg) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06) !important;
+}
+
+html.light-theme .tbl th {
+  background: var(--bg-sidebar) !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+html.light-theme .tbl td {
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+html.light-theme .tbl tbody tr:hover {
+  background: var(--panel-hover) !important;
+}
+
+html.light-theme .tbl tbody tr:has(.lead-checkbox:checked) {
+  background: rgba(95, 168, 78, 0.08) !important;
+}
+
+/* Buttons */
+html.light-theme .btn-primary {
+  background: var(--btn-primary) !important;
+  border-color: var(--btn-primary) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 3px 10px rgba(95, 168, 78, 0.20) !important;
+  text-shadow: none !important;
+}
+
+html.light-theme .btn-primary:hover {
+  background: var(--btn-primary-hover) !important;
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 5px 15px rgba(95, 168, 78, 0.30) !important;
+}
+
+html.light-theme .btn-primary:active {
+  transform: translateY(0.5px) !important;
+  box-shadow: 0 2px 6px rgba(95, 168, 78, 0.15) !important;
+}
+
+html.light-theme .btn-ghost {
+  background: var(--bg-sidebar) !important;
+  border-color: var(--border) !important;
+  color: var(--text-muted) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light-theme .btn-ghost:hover {
+  background: var(--panel-hover) !important;
+  color: var(--text) !important;
+}
+
+html.light-theme .btn-danger {
+  background: var(--danger-low) !important;
+  color: var(--danger) !important;
+  border-color: rgba(220, 38, 38, 0.2) !important;
+}
+
+html.light-theme .btn-danger:hover {
+  background: var(--danger) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 3px 10px rgba(220, 38, 38, 0.20) !important;
+}
+
+/* Modals */
+html.light-theme .overlay {
+  background: rgba(15, 23, 42, 0.4) !important;
+}
+
+html.light-theme .modal {
+  background: #FFFFFF !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18) !important;
+}
+
+html.light-theme .modal-hd {
+  background: var(--bg-sidebar) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+html.light-theme .modal-field {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+html.light-theme .modal-field-label {
+  color: var(--text-muted) !important;
+}
+
+html.light-theme .modal-field-value {
+  color: var(--text) !important;
+}
+
+/* Logo contrast for dashboard page logo */
+html.light-theme .logo-text-lens {
+  fill: var(--accent) !important;
+}
+
+html.light-theme .logo-text-prospect {
+  fill: var(--text) !important;
+}
+
+html.light-theme .logo-contour {
+  stroke: var(--text) !important;
+}
+
+html.light-theme .logo-tagline {
+  fill: var(--text-muted) !important;
 }

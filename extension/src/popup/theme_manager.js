@@ -1,5 +1,13 @@
 // theme_manager.js — Pre-renders and validates font/theme configurations.
 (function () {
+  // Restore persisted theme on load to prevent theme flash
+  const currentTheme = localStorage.getItem("prospectlens-theme");
+  if (currentTheme === "light") {
+    document.documentElement.classList.add("light-theme");
+  } else {
+    document.documentElement.classList.remove("light-theme");
+  }
+
   // Restore persisted font-family on load if exists to prevent layout reflow races
   const currentFont = localStorage.getItem("prospectlens-font");
   if (currentFont) {

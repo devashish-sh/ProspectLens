@@ -1,33 +1,55 @@
 /* popup.css — High-Fidelity UI Match for ProspectLens Popup */
 
 :root {
-  --bg:           #1F201F;                    /* Main Background */
-  --bg-dark:      #1A1A1A;                    /* Header & Nav Backs */
-  --panel-bg:     #242424;                    /* Card Background */
-  --panel-hover:  #2D2D2D;                    /* Hover Surface */
-  --accent:       #76A544;                    /* Primary Accent Green */
-  --accent-low:   rgba(118, 165, 68, 0.08);
-  --accent-mid:   rgba(118, 165, 68, 0.15);
-  --accent-bdr:   rgba(118, 165, 68, 0.25);
-  --accent-solid: #354124;                    /* Deep Olive */
-  --btn-primary:         #76A544;             /* Button Green Accent */
-  --btn-primary-hover:   #658D3B;             /* Dark Accent */
-  --btn-primary-pressed: #52602D;             /* Hover/Pressed */
-  --text:         #E3E4E3;                    /* Primary Text */
-  --text-muted:   #9E9F9E;                    /* Secondary Text */
-  --text-dark:    #606060;                    /* Muted */
-  --border:       #3A3A3A;                    /* Border */
-  --danger:       #C84E4E;                    /* Error */
-  --danger-low:   rgba(200, 78, 78, 0.08);
-  --warn:         #D39C2F;                    /* Warning */
-  --warn-low:     rgba(211, 156, 47, 0.08);
-  --blue:         #4686E3;                    /* Primary Blue */
-  --blue-low:     rgba(70, 134, 227, 0.08);
-  --blue-bg:      #243349;                    /* Secondary Surface / Background Blue */
-  --r:            12px;                       /* Cards Border Radius */
-  --r-inner:      8px;
-  --transition:   all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --font-family:  'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --bg: #1f201f; /* Main Background */
+  --bg-dark: #1a1a1a; /* Header & Nav Backs */
+  --panel-bg: #242424; /* Card Background */
+  --panel-hover: #2d2d2d; /* Hover Surface */
+  --accent: #76a544; /* Primary Accent Green */
+  --accent-low: rgba(118, 165, 68, 0.08);
+  --accent-mid: rgba(118, 165, 68, 0.15);
+  --accent-bdr: rgba(118, 165, 68, 0.25);
+  --accent-solid: #354124; /* Deep Olive */
+  --btn-primary: #76a544; /* Button Green Accent */
+  --btn-primary-hover: #658d3b; /* Dark Accent */
+  --btn-primary-pressed: #52602d; /* Hover/Pressed */
+  --text: #e3e4e3; /* Primary Text */
+  --text-muted: #9e9f9e; /* Secondary Text */
+  --text-dark: #606060; /* Muted */
+  --border: #3a3a3a; /* Border */
+  --danger: #c84e4e; /* Error */
+  --danger-low: rgba(200, 78, 78, 0.08);
+  --warn: #d39c2f; /* Warning */
+  --warn-low: rgba(211, 156, 47, 0.08);
+  --blue: #4686e3; /* Primary Blue */
+  --blue-low: rgba(70, 134, 227, 0.08);
+  --blue-bg: #243349; /* Secondary Surface / Background Blue */
+  --r: 12px; /* Cards Border Radius */
+  --r-inner: 8px;
+  --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --font-family:
+    "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+}
+
+html.light-theme {
+  --bg: #f2f4f2; /* Main Background */
+  --bg-dark: #e4e6e4; /* Header & Nav Backs */
+  --panel-bg: #ffffff; /* Card Background */
+  --panel-hover: #f5f7f5; /* Hover Surface */
+  --accent: #5e8535; /* Primary Accent Green (Slightly darker for contrast) */
+  --accent-low: rgba(94, 133, 53, 0.08);
+  --accent-mid: rgba(94, 133, 53, 0.15);
+  --accent-bdr: rgba(94, 133, 53, 0.25);
+  --accent-solid: #d1dfbe; /* Light Olive */
+  --btn-primary: #5e8535; /* Button Green Accent */
+  --btn-primary-hover: #4e6f2c; /* Dark Accent */
+  --btn-primary-pressed: #3e5823; /* Hover/Pressed */
+  --text: #1c1d1c; /* Primary Text */
+  --text-muted: #555655; /* Secondary Text */
+  --text-dark: #808180; /* Muted */
+  --border: #cccccc; /* Border */
+  --blue-bg: #d5e4f9; /* Secondary Surface / Background Blue */
 }
 
 * {
@@ -39,7 +61,7 @@
 }
 
 body {
-  width: 340px;
+  width: 363px;
   background: var(--bg);
   color: var(--text);
   font-size: 12px;
@@ -60,13 +82,17 @@ body {
   z-index: 0;
 }
 
-.header, .bottom-nav {
+.header,
+.bottom-nav {
   position: relative;
   z-index: 10;
 }
 
-.page-banner, .unsupported-banner,
-.collection-panel, .stats-row, .section {
+.page-banner,
+.unsupported-banner,
+.collection-panel,
+.stats-row,
+.section {
   position: relative;
   z-index: 1;
 }
@@ -86,6 +112,20 @@ body {
   align-items: center;
   gap: 8px;
   cursor: pointer;
+
+  flex: 1;
+  min-width: 0;
+}
+
+.logo svg {
+  display: block;
+
+  width: 200px;
+  height: auto;
+
+  transform: translateY(-1.5px);
+
+  flex-shrink: 0;
 }
 
 /* Inline Animated Logo is fully styled inside HTML SVG defs */
@@ -95,8 +135,9 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 10px;
-  border-radius: 20px;
+  padding: 8px 9px;
+  height: 36px;
+  border-radius: 999px;
   font-size: 10px;
   font-weight: 700;
   background: rgba(255, 255, 255, 0.015);
@@ -104,6 +145,7 @@ body {
   color: var(--text-muted);
   cursor: pointer;
   transition: var(--transition);
+  box-sizing: border-box;
 }
 
 .status-dot {
@@ -152,8 +194,13 @@ body {
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 /* ── CURRENT PAGE CARD (COMPATIBLE BANNER) ── */
@@ -293,7 +340,13 @@ body {
 .collect-btn {
   width: 100%;
   padding: 10px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%), var(--btn-primary);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    var(--btn-primary);
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--r);
@@ -301,18 +354,37 @@ body {
   font-weight: 800;
   cursor: pointer;
   transition: var(--transition);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3), 0 2px 4px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 2px 4px rgba(0, 0, 0, 0.15);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .collect-btn:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%), var(--btn-primary-hover);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 16px rgba(255, 255, 255, 0.15), 0 4px 12px rgba(118, 165, 68, 0.2);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.2) 0%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    var(--btn-primary-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 16px rgba(255, 255, 255, 0.15),
+    0 4px 12px rgba(118, 165, 68, 0.2);
   transform: translateY(-1px);
 }
 
 .collect-btn:active {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 100%), var(--btn-primary-pressed);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    var(--btn-primary-pressed);
   box-shadow: inset 0 1.5px 3px rgba(0, 0, 0, 0.35);
   transform: translateY(0.5px);
 }
@@ -387,7 +459,9 @@ body {
   font-weight: 800;
   color: var(--accent);
   line-height: 1.1;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 3px rgba(0, 0, 0, 0.4);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.4),
+    0 2px 3px rgba(0, 0, 0, 0.4);
 }
 
 .stat-label {
@@ -475,8 +549,12 @@ body {
   font-weight: 800;
 }
 
-.text-green { color: var(--accent); }
-.text-blue { color: var(--blue); }
+.text-green {
+  color: var(--accent);
+}
+.text-blue {
+  color: var(--blue);
+}
 
 .job-progress-track {
   height: 3px;
@@ -491,8 +569,12 @@ body {
   border-radius: 2px;
 }
 
-.bg-green { background: var(--accent); }
-.bg-blue { background: var(--blue); }
+.bg-green {
+  background: var(--accent);
+}
+.bg-blue {
+  background: var(--blue);
+}
 
 .job-footer {
   display: flex;
@@ -737,8 +819,14 @@ body {
 }
 
 @keyframes dropdownSlide {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .dropdown-section-title {
@@ -836,7 +924,13 @@ body {
 
 .btn-reconnect {
   width: 100%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 100%), var(--accent-solid);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    var(--accent-solid);
   border: 1px solid var(--accent);
   color: #ffffff;
   border-radius: var(--r-inner);
@@ -850,14 +944,27 @@ body {
   cursor: pointer;
   transition: var(--transition);
   margin-top: 14px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.1);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3), 0 2px 4px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .btn-reconnect:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%), #52602D;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.15) 0%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    #52602d;
   color: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 16px rgba(255, 255, 255, 0.1), 0 0 10px rgba(118, 165, 68, 0.25);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 16px rgba(255, 255, 255, 0.1),
+    0 0 10px rgba(118, 165, 68, 0.25);
   transform: translateY(-0.5px);
 }
 
@@ -942,22 +1049,44 @@ body {
 }
 
 @keyframes popupFade {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes popupScale {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .btn-reconnect.btn-disconnect {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 100%), #7f1d1d;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    #7f1d1d;
   border-color: #ef4444;
 }
 
 .btn-reconnect.btn-disconnect:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%), #991b1b;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.15) 0%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    #991b1b;
 }
 
 /* ── SETTINGS VIEW CUSTOM SCROLLBAR ── */
@@ -1054,7 +1183,9 @@ body {
 
 .settings-section-card {
   flex-shrink: 0 !important;
-  transition: border-color 0.15s ease, background-color 0.15s ease !important;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease !important;
 }
 
 .settings-row {
@@ -1068,4 +1199,319 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   box-sizing: border-box;
+}
+
+/* ── HEADER DAY/NIGHT THEME TOGGLE ── */
+.theme-toggle-btn {
+  width: 36px;
+  height: 20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  position: relative;
+  transition:
+    background 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.theme-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.theme-toggle-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Light Theme Toggle States */
+html.light-theme .theme-toggle-btn {
+  background: #d1dfbe;
+  border-color: rgba(94, 133, 53, 0.3);
+}
+
+html.light-theme .theme-toggle-thumb {
+  transform: translateX(16px);
+  background: #d39c2f; /* Sun Gold color */
+}
+
+/* Specific light theme text tweaks for logo to maintain perfect visibility */
+html.light-theme .logo-text-prospect {
+  fill: var(--text) !important;
+  filter: none !important;
+}
+
+html.light-theme .logo-text-lens {
+  fill: var(--accent) !important;
+  filter: none !important;
+}
+
+/* Light theme scrollbar adjustments */
+html.light-theme #settings-page-view::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+
+html.light-theme #settings-page-view::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-color: var(--bg-dark);
+}
+
+/* ── LIGHT MODE BRANDING REFINEMENTS ── */
+html.light-theme body {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+/* Header */
+html.light-theme .header {
+  background: var(--bg-dark) !important;
+  border-bottom: 1px solid var(--border) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Cards & Elevated Containers */
+html.light-theme .settings-section-card,
+html.light-theme .stat-card,
+html.light-theme .job-card,
+html.light-theme .batch-item,
+html.light-theme .settings-row {
+  background: var(--panel-bg) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
+  transition: var(--transition) !important;
+}
+
+html.light-theme .settings-section-card:hover,
+html.light-theme .stat-card:hover,
+html.light-theme .job-card:hover,
+html.light-theme .batch-item:hover {
+  border-color: var(--accent-bdr) !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1) !important;
+  background: var(--panel-hover) !important;
+}
+
+/* Stats Typography & Highlights */
+html.light-theme .stat-number {
+  color: var(--accent) !important;
+  text-shadow: none !important;
+}
+
+html.light-theme .stat-label {
+  color: var(--text-muted) !important;
+}
+
+/* Buttons Styling */
+html.light-theme .btn {
+  background: var(--bg-dark) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+  font-weight: 600 !important;
+  transition: var(--transition) !important;
+}
+
+html.light-theme .btn:hover {
+  background: var(--panel-hover) !important;
+  border-color: rgba(15, 23, 42, 0.15) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08) !important;
+}
+
+html.light-theme .btn:active {
+  transform: translateY(0.5px) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light-theme .btn-ghost {
+  background: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+html.light-theme .btn-ghost:hover {
+  background: var(--panel-hover) !important;
+  color: var(--text) !important;
+}
+
+html.light-theme .btn-reconnect {
+  background: var(--btn-primary) !important;
+  border-color: var(--btn-primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 10px rgba(95, 168, 78, 0.2) !important;
+  text-shadow: none !important;
+  font-weight: 700 !important;
+  transition: var(--transition) !important;
+}
+
+html.light-theme .btn-reconnect:hover {
+  background: var(--btn-primary-hover) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 15px rgba(95, 168, 78, 0.3) !important;
+}
+
+html.light-theme .btn-reconnect:active {
+  transform: translateY(0.5px) !important;
+  box-shadow: 0 2px 6px rgba(95, 168, 78, 0.15) !important;
+}
+
+html.light-theme .btn-danger {
+  background: var(--danger) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 3px 10px rgba(220, 38, 38, 0.15) !important;
+}
+
+html.light-theme .btn-danger:hover {
+  background: #b91c1c !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 15px rgba(220, 38, 38, 0.25) !important;
+}
+
+/* Pills & Badges */
+html.light-theme .status-badge {
+  background: var(--accent-solid) !important;
+  border-color: rgba(95, 168, 78, 0.2) !important;
+  color: var(--accent) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light-theme .status-badge:hover {
+  background: #eaf6e6 !important;
+  border-color: var(--accent) !important;
+}
+
+html.light-theme .status-dot {
+  background: var(--accent) !important;
+  box-shadow: 0 0 6px var(--accent) !important;
+}
+
+html.light-theme .status-text {
+  color: var(--accent) !important;
+}
+
+html.light-theme .status-arrow {
+  color: var(--accent) !important;
+}
+
+/* Dropdown system health */
+html.light-theme .status-dropdown {
+  background: var(--panel-bg) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12) !important;
+}
+
+html.light-theme .dropdown-section-title {
+  color: var(--text-dark) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+html.light-theme .health-item {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+html.light-theme .health-label {
+  color: var(--text-muted) !important;
+}
+
+/* Bottom Navigation Bar */
+html.light-theme .bottom-nav {
+  background: var(--bg-dark) !important;
+  border-top: 1px solid var(--border) !important;
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.03) !important;
+}
+
+html.light-theme .nav-tab {
+  color: var(--text-muted) !important;
+}
+
+html.light-theme .nav-tab:hover {
+  color: var(--text) !important;
+}
+
+html.light-theme .nav-tab.active {
+  color: var(--accent) !important;
+}
+
+html.light-theme .nav-tab.active .nav-tab-icon {
+  stroke: var(--accent) !important;
+}
+
+/* Input Fields & Form Controls */
+html.light-theme .settings-section-body select,
+html.light-theme .settings-section-body input[type="number"] {
+  background: #ffffff !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light-theme .settings-section-body select:focus,
+html.light-theme .settings-section-body input[type="number"]:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(95, 168, 78, 0.15) !important;
+}
+
+/* Settings section text colors */
+html.light-theme .settings-section-header span {
+  color: var(--text) !important;
+}
+html.light-theme .settings-section-body {
+  color: var(--text-muted) !important;
+}
+
+html.light-theme .empty-msg {
+  color: var(--text-dark) !important;
+}
+
+/* Logo contrast for Light Mode */
+html.light-theme .logo-contour {
+  stroke: var(--text) !important;
+}
+html.light-theme .logo-tagline {
+  fill: var(--text-muted) !important;
+}
+
+/* Link buttons hover adjustments in Light Mode */
+html.light-theme .link-btn:hover {
+  color: var(--accent) !important;
+  text-decoration: underline !important;
+}
+
+/* Force high contrast text on elements that have inline styles setting them to white */
+html.light-theme [style*="color:#fff"],
+html.light-theme [style*="color: #fff"],
+html.light-theme [style*="color:#ffffff"],
+html.light-theme [style*="color: #ffffff"],
+html.light-theme .settings-row span:not([id]),
+html.light-theme .settings-section-body span:not([id]) {
+  color: var(--text) !important;
+}
+
+/* Ensure secondary labels, descriptions, and statuses have proper contrast in Light Mode */
+html.light-theme .settings-section-body {
+  color: var(--text-muted) !important;
+}
+html.light-theme .settings-section-body span {
+  font-weight: 600;
+}
+html.light-theme .settings-row {
+  color: var(--text-muted) !important;
 }

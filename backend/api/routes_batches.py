@@ -15,9 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from typing import Optional
 from pydantic import BaseModel
+from datetime import datetime
 
 from database.db import get_session
 from database.models import CollectionBatch, Lead
+from services import event_bus
 
 router = APIRouter(tags=["Batches"])
 
@@ -31,23 +33,20 @@ class BatchIn(BaseModel):
     search_query:    str
     source_site:     str        # indiamart / googlemaps / justdial
     collection_mode: str = "quick"
+    search_url:      Optional[str] = None
+    total_listings_found: Optional[int] = 0
 
 class BatchUpdate(BaseModel):
     total_records:      Optional[int] = None
     successful_records: Optional[int] = None
     failed_records:     Optional[int] = None
+    status:             Optional[str] = None # running / completed / failed
 
 
 # ==============================================================================
 # POST /api/batches
 # Called by the Chrome extension BEFORE collection starts.
 # Returns a batch_id that gets attached to every lead in this session.
-#
-# Flow:
-#   1. User clicks "Collect" in the extension
-#   2. Extension calls POST /api/batches → gets batch_id
-#   3. Extension scrapes leads, sends each to POST /api/leads with that batch_id
-#   4. Extension calls PUT /api/batches/{id} with final counts when done
 # ==============================================================================
 
 @router.post("/batches")
@@ -56,11 +55,18 @@ def create_batch(batch_in: BatchIn, session: Session = Depends(get_session)):
         batch_name=batch_in.batch_name or f"{batch_in.source_site} — {batch_in.search_query}",
         search_query=batch_in.search_query,
         source_site=batch_in.source_site,
-        collection_mode=batch_in.collection_mode
+        collection_mode=batch_in.collection_mode,
+        started_at=datetime.utcnow(),
+        status="running",
+        search_url=batch_in.search_url,
+        total_listings_found=batch_in.total_listings_found or 0
     )
     session.add(batch)
     session.commit()
     session.refresh(batch)
+
+    # Publish internal event
+    event_bus.EventBus.publish(event_bus.COLLECTION_STARTED, batch=batch)
 
     return {
         "status": "ok",
@@ -154,14 +160,24 @@ def update_batch(
 
     if update.total_records is not None:
         batch.total_records = update.total_records
+        batch.total_listings_found = update.total_records
     if update.successful_records is not None:
         batch.successful_records = update.successful_records
+        batch.total_leads_stored = update.successful_records
     if update.failed_records is not None:
         batch.failed_records = update.failed_records
+    if update.status is not None:
+        batch.status = update.status
+        if update.status in ["completed", "failed"]:
+            batch.completed_at = datetime.utcnow()
 
     session.add(batch)
     session.commit()
     session.refresh(batch)
+
+    # Publish internal event
+    if batch.status in ["completed", "failed"]:
+        event_bus.EventBus.publish(event_bus.COLLECTION_FINISHED, batch=batch)
 
     return {
         "status": "ok",
