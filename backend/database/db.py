@@ -34,9 +34,19 @@ engine = create_engine(
 # ==============================================================================
 
 def create_db_and_tables():
+    print(f"[DB] Initializing database at: {DB_PATH}")
+    try:
+        if not DB_PATH.parent.exists():
+            DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(DB_PATH, "a"):
+            pass
+        print("[DB] Database file exists and is writable.")
+    except Exception as e:
+        print(f"[DB] WARNING: Database write test failed: {e}")
+
     # Import all models here so SQLModel knows about them before creating tables
     from database.models import (
-        Lead, Contact, CollectionBatch, Job,
+        Lead, Contact, CollectionBatch, Job, CollectionJob,
         ExportHistory, VisitedURL, SourceRecord,
         Note, User, Tag, LeadTag,
         WebsiteSource, DataCapsule, SearchHistory, LeadHistory,
@@ -151,7 +161,22 @@ def create_db_and_tables():
         ("reserved_field_1", "TEXT"),
         ("reserved_field_2", "TEXT"),
         ("reserved_field_3", "TEXT"),
-        ("version", "INTEGER DEFAULT 1")
+        ("version", "INTEGER DEFAULT 1"),
+        ("search_keyword", "TEXT"),
+        ("search_location", "TEXT"),
+        ("collection_date", "TEXT"),
+        ("collection_time", "TEXT"),
+        ("website_domain", "TEXT"),
+        ("open_status", "TEXT"),
+        ("displayed_price", "TEXT"),
+        ("price_currency", "TEXT"),
+        ("price_type", "TEXT"),
+        ("price_level", "TEXT"),
+        ("flexible_metadata", "TEXT"),
+        ("sub_category", "TEXT"),
+        ("source_business_id", "TEXT"),
+        ("collector_version", "TEXT DEFAULT '1.0.0'"),
+        ("secondary_phones", "TEXT")
     ]
     
     with Session(engine) as session:

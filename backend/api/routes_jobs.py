@@ -194,3 +194,136 @@ def cancel_job(job_id: str, session: Session = Depends(get_session)):
     session.commit()
 
     return {"status": "cancelled", "message": f"Job {job_id} has been cancelled"}
+
+
+# ==============================================================================
+# COLLECTION JOBS ENDPOINTS (Sprint 4.5)
+# ==============================================================================
+
+from database.models import CollectionJob
+
+class CollectionJobCreate(BaseModel):
+    job_id: str
+    source: str
+    mode: str = "quick"
+    search_keyword: Optional[str] = None
+    search_query: Optional[str] = None
+    search_location: Optional[str] = None
+    search_url: Optional[str] = None
+    metadata_json: Optional[dict] = None
+
+class CollectionJobProgressUpdate(BaseModel):
+    status: Optional[str] = None
+    saved: Optional[int] = None
+    duplicates: Optional[int] = None
+    errors: Optional[int] = None
+    skipped: Optional[int] = None
+    total_seen: Optional[int] = None
+    current_listing: Optional[str] = None
+    progress_percentage: Optional[float] = None
+    metadata_json: Optional[dict] = None
+
+class CollectionJobStatusUpdate(BaseModel):
+    status: str # completed / failed / cancelled
+
+@router.post("/collection-jobs")
+def register_collection_job(job_in: CollectionJobCreate, session: Session = Depends(get_session)):
+    """Registers a new collection job in the database."""
+    # Check if job already exists
+    existing = session.get(CollectionJob, job_in.job_id)
+    if existing:
+        return {"status": "exists", "job_id": existing.job_id, "job": existing}
+
+    import json
+    meta_str = json.dumps(job_in.metadata_json) if job_in.metadata_json else None
+    
+    job = CollectionJob(
+        job_id=job_in.job_id,
+        status="queued",
+        source=job_in.source,
+        mode=job_in.mode,
+        search_keyword=job_in.search_keyword,
+        search_query=job_in.search_query,
+        search_location=job_in.search_location,
+        search_url=job_in.search_url,
+        start_time=datetime.utcnow(),
+        metadata_json=meta_str
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return {"status": "created", "job_id": job.job_id, "job": job}
+
+@router.post("/collection-jobs/{job_id}/progress")
+def update_collection_job_progress(job_id: str, progress: CollectionJobProgressUpdate, session: Session = Depends(get_session)):
+    """Updates live progress statistics of a collection job."""
+    job = session.get(CollectionJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Collection job {job_id} not found")
+
+    if progress.status:
+        job.status = progress.status
+    if progress.saved is not None:
+        job.saved = progress.saved
+    if progress.duplicates is not None:
+        job.duplicates = progress.duplicates
+    if progress.errors is not None:
+        job.errors = progress.errors
+    if progress.skipped is not None:
+        job.skipped = progress.skipped
+    if progress.total_seen is not None:
+        job.total_seen = progress.total_seen
+    if progress.current_listing is not None:
+        job.current_listing = progress.current_listing
+    if progress.progress_percentage is not None:
+        job.progress_percentage = progress.progress_percentage
+    if progress.metadata_json is not None:
+        import json
+        job.metadata_json = json.dumps(progress.metadata_json)
+
+    job.updated_at = datetime.utcnow()
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return {"status": "ok", "job": job}
+
+@router.post("/collection-jobs/{job_id}/status")
+def update_collection_job_status(job_id: str, status_up: CollectionJobStatusUpdate, session: Session = Depends(get_session)):
+    """Sets the final lifecycle state (completed, failed, cancelled) of a job."""
+    job = session.get(CollectionJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Collection job {job_id} not found")
+
+    job.status = status_up.status
+    job.end_time = datetime.utcnow()
+    
+    if job.start_time:
+        delta = job.end_time - job.start_time
+        job.duration = delta.total_seconds()
+        
+    job.updated_at = datetime.utcnow()
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return {"status": "ok", "job": job}
+
+@router.get("/collection-jobs/active")
+def get_active_collection_job(session: Session = Depends(get_session)):
+    """Gets the currently active/running collection job."""
+    job = session.exec(
+        select(CollectionJob).where(
+            (CollectionJob.status == "running") | (CollectionJob.status == "paused") | (CollectionJob.status == "queued") | (CollectionJob.status == "starting")
+        ).order_by(CollectionJob.updated_at.desc())
+    ).first()
+    
+    if not job:
+        return {"status": "no_active_job", "job": None}
+    return {"status": "ok", "job": job}
+
+@router.get("/collection-jobs/recent")
+def get_recent_collection_jobs(session: Session = Depends(get_session)):
+    """Gets recent collection jobs (history)."""
+    jobs = session.exec(
+        select(CollectionJob).order_by(CollectionJob.created_at.desc()).limit(15)
+    ).all()
+    return {"status": "ok", "jobs": jobs}

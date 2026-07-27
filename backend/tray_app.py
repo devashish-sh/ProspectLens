@@ -9,6 +9,8 @@ import sys
 import subprocess
 import webbrowser
 import time
+import urllib.request
+import urllib.error
 from pathlib import Path
 from PIL import Image
 import pystray
@@ -43,10 +45,25 @@ def get_icon_image():
     draw.ellipse((6, 6, 26, 26), fill=(118, 165, 68, 255))
     return img
 
+def is_server_port_active() -> bool:
+    """Checks if the backend API is already listening on port 8000."""
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8000/api/health", timeout=1) as response:
+            return response.status == 200
+    except Exception:
+        return False
+
+def is_server_running() -> bool:
+    """Returns True if the uvicorn subprocess is alive or the port is already active."""
+    global server_process
+    if server_process and server_process.poll() is None:
+        return True
+    return is_server_port_active()
+
 def start_server():
     """Spins up uvicorn server in a subprocess."""
     global server_process
-    if server_process and server_process.poll() is None:
+    if is_server_running():
         print("Server is already running.")
         return
 
@@ -83,7 +100,7 @@ def stop_server():
     """Terminates uvicorn server subprocess."""
     global server_process
     if server_process:
-        print("Stopping uvicorn server...")
+        print("Stopping spawned uvicorn server...")
         if os.name == 'nt':
             # Force terminate subprocess tree on Windows
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(server_process.pid)], capture_output=True)
@@ -91,11 +108,17 @@ def stop_server():
             server_process.terminate()
         server_process = None
         print("Uvicorn server stopped.")
-
-def is_server_running() -> bool:
-    """Returns True if the uvicorn subprocess is alive."""
-    global server_process
-    return server_process is not None and server_process.poll() is None
+    else:
+        # If the server is running on the port but was not spawned in this session,
+        # request shutdown via the shutdown API.
+        if is_server_port_active():
+            print("Requesting shutdown of active server on port 8000...")
+            try:
+                req = urllib.request.Request("http://127.0.0.1:8000/api/shutdown", method="POST")
+                with urllib.request.urlopen(req, timeout=2) as r:
+                    print("Shutdown requested successfully:", r.read().decode())
+            except Exception as e:
+                print(f"Failed to request API shutdown: {e}")
 
 def menu_status_text(item):
     """Dynamically displays status label in tray menu."""
@@ -113,7 +136,9 @@ def on_open_dashboard(icon, item):
     webbrowser.open("http://localhost:8000/docs")
 
 def on_exit(icon, item):
-    stop_server()
+    # Closes the system tray app, but does NOT stop the server process.
+    # The server process will continue running in the background.
+    print("Exiting tray interface. Server process left running.")
     icon.stop()
 
 def setup_tray():

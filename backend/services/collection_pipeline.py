@@ -123,6 +123,18 @@ class CollectionPipeline:
 
         # Step 3: Deduplicate
         if is_duplicate_lead(dedup_hash, session):
+            try:
+                from database.models import CollectionJob
+                job = session.get(CollectionJob, lead_data.get("batch_id"))
+                if job:
+                    job.total_seen += 1
+                    job.duplicates += 1
+                    job.updated_at = datetime.utcnow()
+                    session.add(job)
+                    session.commit()
+            except Exception as e:
+                print(f"[DB] Error incrementing job duplicate counter: {e}")
+
             return {
                 "status": "duplicate",
                 "message": f"Lead '{biz_name}' already exists — skipped",
@@ -181,6 +193,25 @@ class CollectionPipeline:
             # Collection Information
             directory_search_url=lead_data.get("directory_search_url"),
             
+            # New fields for Sprint 4.3 Quick Collect Expansion
+            search_keyword=lead_data.get("search_keyword"),
+            search_location=lead_data.get("search_location"),
+            collection_date=lead_data.get("collection_date"),
+            collection_time=lead_data.get("collection_time"),
+            website_domain=lead_data.get("website_domain"),
+            open_status=lead_data.get("open_status"),
+            displayed_price=lead_data.get("displayed_price"),
+            price_currency=lead_data.get("price_currency"),
+            price_type=lead_data.get("price_type"),
+            price_level=lead_data.get("price_level"),
+            flexible_metadata=__import__("json").dumps(lead_data.get("flexible_metadata")) if isinstance(lead_data.get("flexible_metadata"), dict) else lead_data.get("flexible_metadata"),
+
+            # Sprint 4.4 Universal Schema additions
+            sub_category=lead_data.get("sub_category"),
+            source_business_id=lead_data.get("source_business_id"),
+            collector_version=lead_data.get("collector_version", "1.0.0"),
+            secondary_phones=lead_data.get("secondary_phones"),
+
             dedup_hash=dedup_hash
         )
         
@@ -191,6 +222,19 @@ class CollectionPipeline:
         
         print(f"[DEBUG_AUDIT] Lead ID: '{lead.business_name}' | Step 2: Validation success (Completeness: {comp_score})")
         session.add(lead)
+
+        # Increment active collection job counters (Sprint 4.5)
+        try:
+            from database.models import CollectionJob
+            job = session.get(CollectionJob, lead.batch_id)
+            if job:
+                job.total_seen += 1
+                job.saved += 1
+                job.updated_at = datetime.utcnow()
+                session.add(job)
+        except Exception as e:
+            print(f"[DB] Error incrementing collection job counter: {e}")
+
         session.flush()
         print(f"[DEBUG_AUDIT] Lead ID: '{lead.business_name}' | Step 3: Database Save (flushed)")
 

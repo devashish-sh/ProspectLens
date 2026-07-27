@@ -265,11 +265,27 @@
         <span class="collect-btn-text">Start Collection</span>
       </button>
 
-      <div class="progress-wrap hidden" id="progress-container">
+      <div id="collection-controls" class="collection-controls hidden">
+        <button class="btn-control btn-pause" id="btn-pause-collection">Pause</button>
+        <button class="btn-control btn-resume hidden" id="btn-resume-collection">Resume</button>
+        <button class="btn-control btn-stop" id="btn-stop-collection">Stop</button>
+      </div>
+
+      <div class="progress-wrap hidden" id="progress-container" style="margin-top: 10px;">
         <div class="progress-track">
           <div class="progress-fill" id="progress-fill"></div>
         </div>
         <div class="progress-text" id="progress-text">Starting...</div>
+      </div>
+
+      <div id="rich-progress" class="rich-progress hidden" style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 6px; padding: 8px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);">
+        <div style="color: var(--text-dark);">Collected: <strong id="prog-collected" style="color:#fff;">0</strong></div>
+        <div style="color: var(--text-dark);">Saved: <strong id="prog-saved" style="color:var(--accent);">0</strong></div>
+        <div style="color: var(--text-dark);">Duplicates: <strong id="prog-duplicates" style="color:#f59e0b;">0</strong></div>
+        <div style="color: var(--text-dark);">Failed: <strong id="prog-failed" style="color:#ea4335;">0</strong></div>
+        <div style="grid-column: span 2; border-top: 1px solid var(--border); padding-top: 4px; margin-top: 2px; color: var(--text-dark);">
+          Status: <span id="prog-status" style="color:#fff; font-weight: bold;">Waiting...</span>
+        </div>
       </div>
     </div>
 
@@ -363,6 +379,38 @@
       </div>
     </div>
 
+    <!-- 1.5. BACKEND LAUNCHER -->
+    <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
+      <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">🚀 Backend Launcher</span>
+        <span class="chevron" style="font-size: 8px; color: var(--accent); transition: transform 0.2s;">▶</span>
+      </div>
+      <div class="settings-section-body hidden" style="padding: 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; font-size: 10px; color: var(--text-dark);">
+        <div class="settings-row" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+          <span>Launcher Path:</span>
+          <div style="display: flex; width: 100%; gap: 6px;">
+            <input type="text" id="sett-launcher-path" style="background:#111; border:1px solid #333; color:#fff; font-size:9px; padding:4px 6px; border-radius:3px; flex: 1; min-width: 0;" />
+            <button class="btn btn-ghost" id="btn-save-launcher" style="padding:4px 8px; font-size:9px; margin:0;">Save</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span>Current Engine State:</span>
+          <span id="sett-engine-state" style="color:#fff; font-weight:700;">OFFLINE</span>
+        </div>
+        <div class="settings-row">
+          <span>Last Startup Time:</span>
+          <span id="sett-last-startup" style="color:#fff; font-weight:700;">—</span>
+        </div>
+        <div class="settings-row">
+          <span>Last Shutdown Time:</span>
+          <span id="sett-last-shutdown" style="color:#fff; font-weight:700;">—</span>
+        </div>
+        <div style="display: flex; gap: 6px; margin-top: 4px;">
+          <button class="btn btn-ghost" id="btn-restore-default-launcher" style="padding:4px 8px; font-size:9px; margin:0; flex:1;">Restore Default</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 2. COLLECTION -->
     <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">
       <div class="settings-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; user-select: none;">
@@ -399,7 +447,21 @@
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <span>Auto Scroll Pages:</span>
-          <input type="checkbox" id="sett-auto-scroll" checked style="accent-color:var(--accent);" />
+          <input type="checkbox" id="sett-auto-scroll" checked style="accent-color:var(--accent); cursor:pointer;" />
+        </div>
+        <div id="quick-limit-row" style="display: flex; justify-content: space-between; align-items: center; transition: opacity 0.3s ease;">
+          <span>Collection Limit:</span>
+          <select id="sett-quick-limit" style="background:#111; border:1px solid #333; color:#fff; font-size:9px; padding:2px 4px; border-radius:3px; cursor:pointer; transition: all 0.3s ease;">
+            <option value="Unlimited">Unlimited</option>
+            <option value="25">25 Leads</option>
+            <option value="50">50 Leads</option>
+            <option value="100">100 Leads</option>
+            <option value="250">250 Leads</option>
+            <option value="500">500 Leads</option>
+          </select>
+        </div>
+        <div id="quick-limit-helper" style="font-size: 8px; color: var(--text-muted); margin-top: -6px; line-height: 1.3; transition: all 0.3s ease; opacity: 0; max-height: 0; overflow: hidden; padding-left: 2px;">
+          Collection Limit is only available when Auto Scroll is enabled.
         </div>
       </div>
     </div>
@@ -574,6 +636,8 @@
         </div>
       </div>
     </div>
+
+
 
     <!-- 7. APPEARANCE -->
     <div class="settings-section-card" style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: var(--transition);">

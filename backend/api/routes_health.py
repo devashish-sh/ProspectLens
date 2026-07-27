@@ -61,3 +61,24 @@ def health_db():
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+# ==============================================================================
+# POST /api/shutdown
+# Shuts down the backend server process gracefully.
+# Called by the extension UI or other external automation scripts.
+# ==============================================================================
+
+import os
+from fastapi import BackgroundTasks
+
+@router.post("/shutdown")
+def shutdown(background_tasks: BackgroundTasks):
+    def terminate():
+        import time
+        print("[ProspectLens] Shutdown endpoint triggered. Exiting server process...")
+        time.sleep(0.5)  # Let response deliver to client before killing process
+        os._exit(0)
+
+    background_tasks.add_task(terminate)
+    return {"status": "shutdown_initiated", "message": "Server will exit in 500ms"}

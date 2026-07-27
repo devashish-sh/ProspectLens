@@ -37,6 +37,7 @@ class BatchIn(BaseModel):
     collection_mode: str = "quick"
     search_url:      Optional[str] = None
     total_listings_found: Optional[int] = 0
+    batch_id:        Optional[str] = None
 
 class BatchUpdate(BaseModel):
     total_records:      Optional[int] = None
@@ -59,7 +60,8 @@ def create_batch(batch_in: BatchIn, session: Session = Depends(get_session)):
         search_query=batch_in.search_query,
         collection_mode=batch_in.collection_mode,
         search_url=batch_in.search_url,
-        batch_name=batch_in.batch_name
+        batch_name=batch_in.batch_name,
+        batch_id=batch_in.batch_id
     )
     return {
         "status": "ok",

@@ -3,15 +3,14 @@
   "name": "ProspectLens",
   "version": "1.0.0",
   "description": "Automated B2B lead collection from IndiaMART, Google Maps, and Justdial",
-
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
     "tabs",
-    "notifications"
+    "notifications",
+    "nativeMessaging"
   ],
-
   "host_permissions": [
     "http://localhost:8000/*",
     "https://www.indiamart.com/*",
@@ -20,51 +19,54 @@
     "https://maps.google.com/*",
     "https://www.justdial.com/*"
   ],
-
   "background": {
     "service_worker": "src/background/background.js",
     "type": "module"
   },
-
   "action": {
     "default_popup": "src/popup/popup.html",
     "default_title": "ProspectLens",
     "default_icon": {
-      "16":  "icons/icon16.png",
-      "48":  "icons/icon48.png",
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
   },
-
   "content_scripts": [
     {
       "matches": [
         "https://www.indiamart.com/*",
-        "https://dir.indiamart.com/*"
-      ],
-      "js": ["src/content-scripts/collector.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
+        "https://dir.indiamart.com/*",
         "https://www.google.com/maps/*",
-        "https://maps.google.com/*"
-      ],
-      "js": ["src/content-scripts/collector.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
+        "https://maps.google.com/*",
         "https://www.justdial.com/*"
       ],
-      "js": ["src/content-scripts/collector.js"],
+      "js": [
+        "src/content-scripts/utils/logger.js",
+        "src/content-scripts/utils/regex.js",
+        "src/content-scripts/utils/domHelpers.js",
+        "src/content-scripts/utils/validator.js",
+        "src/content-scripts/utils/normalizer.js",
+        "src/content-scripts/adapters/baseAdapter.js",
+        "src/content-scripts/adapters/googleMaps.js",
+        "src/content-scripts/adapters/indiaMart.js",
+        "src/content-scripts/adapters/justdial.js",
+        "src/content-scripts/adapters/tradeIndia.js",
+        "src/content-scripts/engine/stateManager.js",
+        "src/content-scripts/engine/progressManager.js",
+        "src/content-scripts/engine/queueManager.js",
+        "src/content-scripts/engine/scrollManager.js",
+        "src/content-scripts/engine/extractionPipeline.js",
+        "src/content-scripts/messaging.js",
+        "src/content-scripts/collector.js"
+      ],
       "run_at": "document_idle"
     }
   ],
-
   "icons": {
-    "16":  "icons/icon16.png",
-    "48":  "icons/icon48.png",
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxZZ9UrcRgi/qMbIyDmq+b5gzn8WjKZoUnk97zQMpmxGQewDHHkg1VBTEZpZu7okOw8o0XJqo1erSE+XV/laWlOup18n5QsnMzj/JeFbwfrDcPo4/iSppWEISaqx9btcSO0rzUwHi2RlCQOAufhB6E/lUD8cBHxST/MMbTusyC6757kcR3qgy+OYgvJvtXN8ZlowToAPv4NqfU1E7UTl/YqxgZM8aLXDXK9de/QlzgJvBoRfXwTIDu7JpGW4e4sYqXMgSGJDO14olKwXszUkSTj7sNPQBquGg2TxNOqWveJyQ5aubaaaK4z0bpswtpPZFJKY1JZzsRisQtuEaJeYJDwIDAQAB"
 }

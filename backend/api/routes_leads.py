@@ -65,6 +65,28 @@ class LeadIn(BaseModel):
     listing_url:     Optional[str] = None
     collection_mode: str = "quick"
 
+    # New fields for Sprint 4.3
+    search_keyword:  Optional[str] = None
+    search_location: Optional[str] = None
+    collection_date: Optional[str] = None
+    collection_time: Optional[str] = None
+    website_domain:  Optional[str] = None
+    open_status:     Optional[str] = None
+    displayed_price: Optional[str] = None
+    price_currency:  Optional[str] = None
+    price_type:      Optional[str] = None
+    price_level:     Optional[str] = None
+    flexible_metadata: Optional[dict] = None
+    rating:          Optional[float] = None
+    review_count:    Optional[int] = None
+    directory_search_url: Optional[str] = None
+
+    # Sprint 4.4 additions
+    sub_category:     Optional[str] = None
+    source_business_id: Optional[str] = None
+    collector_version: Optional[str] = "1.0.0"
+    secondary_phones:  Optional[str] = None
+
     # Contacts list — phones, emails etc
     contacts:        list[ContactIn] = []
 

@@ -1093,3 +1093,217 @@ html.light-theme .logo-contour {
 html.light-theme .logo-tagline {
   fill: var(--text-muted) !important;
 }
+
+/* ==============================================================================
+   DESIGN POLISH & UX REFINE PREFERENCES (Sprint 3.5)
+   ============================================================================== */
+
+/* Smoother animations */
+.nav-link, .card, .btn, .f-input, .f-select, .export-card {
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Spinner and rotate keyframes */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Skeleton Loading pulse keyframes */
+@keyframes pulse-placeholder {
+  0%, 100% { opacity: 0.05; }
+  50% { opacity: 0.15; }
+}
+
+.skeleton-row {
+  height: 38px;
+  background: var(--text-muted);
+  border-radius: 4px;
+  margin: 8px 0;
+  animation: pulse-placeholder 1.5s ease-in-out infinite;
+}
+
+/* Sidebar refinement */
+.sidebar {
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3) !important;
+  background: #0d0d0d !important;
+}
+.nav-link.active {
+  background: rgba(118, 165, 68, 0.12) !important;
+  border-color: rgba(118, 165, 68, 0.3) !important;
+  color: var(--accent) !important;
+  font-weight: 700 !important;
+}
+.nav-link:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--text) !important;
+}
+
+/* Spacing and cards refinement */
+.card {
+  border: 1px solid #222 !important;
+  background: #0c0c0c !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+.card:hover {
+  transform: translateY(-1.5px) !important;
+  border-color: var(--accent-bdr) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Data capsules lists card polish */
+.export-card.capsule-card {
+  border: 1px solid #222 !important;
+  background: #0a0a0a !important;
+  border-radius: 8px !important;
+  padding: 16px !important;
+  transition: all 0.2s ease !important;
+}
+.export-card.capsule-card:hover {
+  border-color: var(--accent-bdr) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.4) !important;
+  background: #111 !important;
+}
+
+/* Table styling polish */
+.tbl-wrap {
+  border: 1px solid #1c1c1e !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  overflow: hidden;
+}
+.tbl {
+  border-collapse: collapse !important;
+}
+.tbl th {
+  background: #0f0f11 !important;
+  color: var(--text-dark) !important;
+  font-weight: 750 !important;
+  font-size: 10px !important;
+  letter-spacing: 0.5px;
+  padding: 12px 14px !important;
+  border-bottom: 1px solid #1c1c1e !important;
+}
+.tbl td {
+  padding: 12px 14px !important;
+  font-size: 11px !important;
+  border-bottom: 1px solid #121214 !important;
+  vertical-align: middle;
+}
+.tbl tr:hover td {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+.tbl tr:last-child td {
+  border-bottom: none !important;
+}
+
+/* Quality Indicator Badge Styling */
+.badge-quality-high {
+  background: rgba(118, 165, 68, 0.15) !important;
+  color: var(--accent) !important;
+  border: 1px solid rgba(118, 165, 68, 0.3) !important;
+}
+.badge-quality-medium {
+  background: rgba(211, 156, 47, 0.15) !important;
+  color: var(--warn) !important;
+  border: 1px solid rgba(211, 156, 47, 0.3) !important;
+}
+.badge-quality-low {
+  background: rgba(200, 78, 78, 0.15) !important;
+  color: var(--danger) !important;
+  border: 1px solid rgba(200, 78, 78, 0.3) !important;
+}
+
+/* Standardized Buttons */
+.btn {
+  height: 32px !important;
+  padding: 6px 14px !important;
+  border-radius: 6px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+}
+.btn-danger {
+  height: 24px !important;
+  padding: 2px 8px !important;
+  font-size: 10px !important;
+}
+
+/* Input Fields */
+.f-input, .f-select {
+  height: 32px !important;
+  padding: 6px 12px !important;
+  border-radius: 6px !important;
+  background: #111112 !important;
+  border: 1px solid #222224 !important;
+  color: var(--text) !important;
+  font-size: 11px !important;
+}
+.f-input:focus, .f-select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent-bdr) !important;
+}
+
+/* Settings Sections */
+.settings-section {
+  border: 1px solid #1c1c1e !important;
+  background: #08080a !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15) !important;
+}
+.settings-card, .connection-card, .database-card {
+  border: 1px solid #1a1a1c !important;
+  background: #0d0d0f !important;
+  border-radius: 6px !important;
+}
+
+/* Offline Overlay */
+.main {
+  position: relative;
+}
+.offline-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 11, 15, 0.95);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+.offline-overlay.hidden {
+  display: none !important;
+}
+.offline-content {
+  text-align: center;
+  max-width: 400px;
+  padding: 32px;
+  background: rgba(22, 25, 31, 0.6);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+.offline-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 16px;
+  animation: blink 1.5s infinite;
+}
+.offline-content h2 {
+  color: #fff;
+  margin-bottom: 8px;
+  font-size: 20px;
+}
+.offline-content p {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}

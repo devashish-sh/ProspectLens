@@ -6,7 +6,12 @@
 // - Relaying messages between popup and content scripts
 // - Keeping track of active collection jobs
 
+import { EngineManager } from "./engine_manager.js";
+
 const API_BASE = "http://localhost:8000/api";
+
+// Initialize Engine Manager
+EngineManager.init();
 
 // ============================================================
 // ON INSTALL — first time extension is loaded
@@ -41,6 +46,26 @@ async function updateBadge() {
 // forwards them to the correct destination.
 // ============================================================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
+  if (message.action === "START_ENGINE") {
+    EngineManager.startEngine().then(result => sendResponse(result));
+    return true; // Keep channel open
+  }
+
+  if (message.action === "STOP_ENGINE") {
+    EngineManager.stopEngine().then(result => sendResponse(result));
+    return true; // Keep channel open
+  }
+
+  if (message.action === "RESTORE_DEFAULT_LAUNCHER") {
+    EngineManager.restoreDefaultLauncherPath().then(() => sendResponse({ success: true }));
+    return true; // Keep channel open
+  }
+
+  if (message.action === "SAVE_LAUNCHER_PATH") {
+    EngineManager.setLauncherPath(message.path).then(() => sendResponse({ success: true }));
+    return true; // Keep channel open
+  }
 
   if (message.action === "SAVE_LEAD") {
     fetch(`${API_BASE}/leads`, {
@@ -105,6 +130,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then(data => sendResponse({ online: data.status === "ok" }))
       .catch(() => sendResponse({ online: false }));
     return true; // Keep message channel open for async response
+  }
+
+  if (message.action === "CREATE_JOB") {
+    fetch(`${API_BASE}/collection-jobs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        job_id: message.jobId,
+        source: message.source,
+        mode: message.mode,
+        search_keyword: message.searchKeyword,
+        search_query: message.searchQuery,
+        search_location: message.searchLocation,
+        search_url: message.searchUrl
+      })
+    })
+    .then(r => r.json())
+    .then(data => sendResponse(data))
+    .catch(err => {
+      console.error("[Background] CREATE_JOB failed:", err);
+      sendResponse({ status: "error", message: err.message });
+    });
+    return true; // Keep channel open
+  }
+
+  if (message.action === "UPDATE_JOB_PROGRESS") {
+    fetch(`${API_BASE}/collection-jobs/${message.jobId}/progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(message.progress)
+    })
+    .then(r => r.json())
+    .then(data => sendResponse(data))
+    .catch(err => {
+      console.error("[Background] UPDATE_JOB_PROGRESS failed:", err);
+      sendResponse({ status: "error", message: err.message });
+    });
+    return true; // Keep channel open
+  }
+
+  if (message.action === "UPDATE_JOB_STATUS") {
+    fetch(`${API_BASE}/collection-jobs/${message.jobId}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: message.status })
+    })
+    .then(r => r.json())
+    .then(data => sendResponse(data))
+    .catch(err => {
+      console.error("[Background] UPDATE_JOB_STATUS failed:", err);
+      sendResponse({ status: "error", message: err.message });
+    });
+    return true; // Keep channel open
   }
 
   return false;

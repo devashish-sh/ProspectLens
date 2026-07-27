@@ -24,7 +24,8 @@ class CollectionSessionManager:
         search_query: str,
         collection_mode: str = "quick",
         search_url: Optional[str] = None,
-        batch_name: Optional[str] = None
+        batch_name: Optional[str] = None,
+        batch_id: Optional[str] = None
     ) -> CollectionBatch:
         """
         Creates a new collection batch (session) and seeds its search context.
@@ -42,6 +43,8 @@ class CollectionSessionManager:
             total_listings_found=0,
             last_updated_at=datetime.utcnow()
         )
+        if batch_id:
+            batch.batch_id = batch_id
         session.add(batch)
         session.commit()
         session.refresh(batch)

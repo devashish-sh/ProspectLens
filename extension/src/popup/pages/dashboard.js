@@ -1,7 +1,7 @@
 // dashboard.js — ProspectLens Full Dashboard Logic
 // Restored to v1.1 experience with original styles and advanced functionality additions.
 
-const API_BASE = "http://localhost:8000/api";
+let API_BASE = localStorage.getItem("prospectlens-api-url") || "http://localhost:8000/api";
 
 // ============================================================
 // STATE
@@ -14,12 +14,52 @@ let filters = {
   search:  "",
   source:  "",
   status:  "",
+  mode:    "",
   city:    "",
   sort:    "date-desc"
 };
 
 let deletedLeadsBackup = []; // Stores deleted records temporarily for undo action
 let currentSelectedCapsule = null; // Tracks currently active capsule ID
+
+let selectedCapsuleLeads = new Set();
+let selectedMainLeads = new Set();
+
+function getTableSpinnerHtml(colSpan, message) {
+  return `
+    <tr>
+      <td colspan="${colSpan}" style="padding: 48px 16px; text-align: center; border: none;">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; margin: auto;">
+          <div style="width: 24px; height: 24px; border: 2.5px solid rgba(255,255,255,0.06); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+          <div style="font-size: 11px; color: var(--text-muted); font-weight: 500;">${message}</div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function getTableEmptyStateHtml(colSpan, emoji, title, subtitle) {
+  return `
+    <tr>
+      <td colspan="${colSpan}" style="padding: 48px 16px; text-align: center; border: none;">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin: auto; max-width: 280px;">
+          <span style="font-size: 32px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">${emoji}</span>
+          <div style="font-size: 13px; font-weight: 700; color: var(--text);">${title}</div>
+          <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">${subtitle}</div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function getDetailSpinnerHtml(message) {
+  return `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 60px 16px;">
+      <div style="width: 28px; height: 28px; border: 2.5px solid rgba(255,255,255,0.06); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+      <div style="font-size: 12px; color: var(--text-muted); font-weight: 500;">${message}</div>
+    </div>
+  `;
+}
 
 // ============================================================
 // BROADCAST STATE UPDATE
@@ -35,32 +75,60 @@ function broadcastStateUpdate() {
 // ============================================================
 async function checkBackend() {
   const badge    = document.getElementById("dash-backend-status");
-  const text     = badge.querySelector(".dash-status-text");
+  const text     = badge ? badge.querySelector(".dash-status-text") : null;
+  const overlay  = document.getElementById("offline-overlay");
 
-  try {
-    // Check persistent disconnected state first
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      const store = await chrome.storage.local.get("disconnected");
-      if (store.disconnected) {
-        badge.className = "dash-status-badge offline";
-        text.textContent = "Disconnected";
-        return false;
-      }
-    }
+  const data = await chrome.storage.local.get("engineState");
+  const state = data.engineState || "OFFLINE";
 
-    const res  = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
-    const data = await res.json();
-    if (data.status === "ok") {
-      badge.className = "dash-status-badge online";
-      text.textContent = "Connected";
+  if (badge && text) {
+    if (state === "RUNNING") {
+      badge.className = "backend-pill online";
+      text.textContent = "Engine Running";
+      if (overlay) overlay.classList.add("hidden");
       return true;
+    } else if (state === "STARTING") {
+      badge.className = "backend-pill checking";
+      text.textContent = "Starting...";
+      if (overlay) {
+        overlay.classList.remove("hidden");
+        const heading = overlay.querySelector("h2");
+        const statusIcon = overlay.querySelector(".offline-icon");
+        const desc = overlay.querySelector("p");
+        if (heading) heading.textContent = "Starting Engine...";
+        if (statusIcon) statusIcon.textContent = "🟡";
+        if (desc) desc.textContent = "Launching the backend process and running diagnostic checks. Please wait...";
+      }
+      return false;
+    } else if (state === "STOPPING") {
+      badge.className = "backend-pill checking";
+      text.textContent = "Stopping...";
+      if (overlay) {
+        overlay.classList.remove("hidden");
+        const heading = overlay.querySelector("h2");
+        const statusIcon = overlay.querySelector(".offline-icon");
+        const desc = overlay.querySelector("p");
+        if (heading) heading.textContent = "Stopping Engine...";
+        if (statusIcon) statusIcon.textContent = "🟠";
+        if (desc) desc.textContent = "Gracefully shutting down the backend process...";
+      }
+      return false;
+    } else { // OFFLINE
+      badge.className = "backend-pill offline";
+      text.textContent = "Engine Offline";
+      if (overlay) {
+        overlay.classList.remove("hidden");
+        const heading = overlay.querySelector("h2");
+        const statusIcon = overlay.querySelector(".offline-icon");
+        const desc = overlay.querySelector("p");
+        if (heading) heading.textContent = "Engine Offline";
+        if (statusIcon) statusIcon.textContent = "🔴";
+        if (desc) desc.textContent = "The ProspectLens background engine is not running.";
+      }
+      return false;
     }
-    throw new Error();
-  } catch {
-    badge.className = "dash-status-badge offline";
-    text.textContent = "Offline";
-    return false;
   }
+  return state === "RUNNING";
 }
 
 // ============================================================
@@ -71,13 +139,19 @@ async function loadStats() {
     const res  = await fetch(`${API_BASE}/leads/stats`);
     const data = await res.json();
 
-    document.getElementById("dash-total").textContent     = data.total_database_leads ?? 0;
-    document.getElementById("dash-new").textContent       = data.by_status?.new ?? 0;
-    document.getElementById("dash-contacted").textContent = data.by_status?.contacted ?? 0;
-    document.getElementById("dash-qualified").textContent = data.by_status?.qualified ?? 0;
-    document.getElementById("dash-indiamart").textContent  = data.by_source?.indiamart ?? 0;
-    document.getElementById("dash-googlemaps").textContent = data.by_source?.googlemaps ?? 0;
-    document.getElementById("dash-justdial").textContent   = data.by_source?.justdial ?? 0;
+    const totalApproved = data.total_leads ?? 0;
+    const totalAll = data.total_database_leads ?? 0;
+    const pendingReview = Math.max(0, totalAll - totalApproved);
+    const activeSources = Object.keys(data.by_source || {}).filter(k => (data.by_source[k] || 0) > 0).length;
+
+    const elTotal = document.getElementById("dash-total");
+    if (elTotal) elTotal.textContent = totalApproved;
+
+    const elPending = document.getElementById("dash-pending-total");
+    if (elPending) elPending.textContent = pendingReview;
+
+    const elActive = document.getElementById("dash-active-count");
+    if (elActive) elActive.textContent = activeSources;
 
     // Populate city filter dropdown
     const citySelect = document.getElementById("filter-city");
@@ -93,9 +167,129 @@ async function loadStats() {
 
     // Populate Data Capsules cards and update detail views if selected
     updateDataCapsules(data);
+    
+    // Load collection jobs tracker (Sprint 4.5)
+    loadCollectionJobs();
 
   } catch (e) {
     console.error("Stats load failed", e);
+  }
+}
+
+// ============================================================
+// COLLECTION JOBS TRACKER LOADER (Sprint 4.5)
+// ============================================================
+async function loadCollectionJobs() {
+  try {
+    // 1. Fetch active collection job
+    const activeRes = await fetch(`${API_BASE}/collection-jobs/active`);
+    const activeData = await activeRes.json();
+    
+    const activeJobContainer = document.getElementById("active-job-container");
+    const noActiveJobPlaceholder = document.getElementById("no-active-job-placeholder");
+    
+    if (activeData.status === "ok" && activeData.job) {
+      const job = activeData.job;
+      if (activeJobContainer) activeJobContainer.style.display = "block";
+      if (noActiveJobPlaceholder) noActiveJobPlaceholder.style.display = "none";
+      
+      const titleEl = document.getElementById("active-job-title");
+      if (titleEl) titleEl.textContent = `Job: ${job.job_id}`;
+      
+      const statusEl = document.getElementById("active-job-status");
+      if (statusEl) {
+        statusEl.textContent = job.status;
+        statusEl.style.background = job.status === "paused" ? "#fbbf24" : (job.status === "running" ? "var(--accent)" : "#f87171");
+      }
+      
+      const keywordEl = document.getElementById("active-job-keyword");
+      if (keywordEl) keywordEl.textContent = job.search_keyword || "—";
+      
+      const sourceEl = document.getElementById("active-job-source");
+      if (sourceEl) {
+        const sourceLabel = job.source === "googlemaps" ? "Google Maps" : (job.source === "indiamart" ? "IndiaMART" : (job.source === "justdial" ? "Justdial" : job.source));
+        sourceEl.textContent = `${sourceLabel} (${job.mode})`;
+      }
+      
+      const progressLbl = document.getElementById("active-job-progress-lbl");
+      if (progressLbl) progressLbl.textContent = `${Math.round(job.progress_percentage || 0)}%`;
+      
+      const listingEl = document.getElementById("active-job-listing");
+      if (listingEl) listingEl.textContent = job.current_listing || "Waiting...";
+      
+      const progressBar = document.getElementById("active-job-progress-bar");
+      if (progressBar) progressBar.style.width = `${Math.round(job.progress_percentage || 0)}%`;
+      
+      const seenEl = document.getElementById("active-job-seen");
+      if (seenEl) seenEl.textContent = job.total_seen || 0;
+      
+      const savedEl = document.getElementById("active-job-saved");
+      if (savedEl) savedEl.textContent = job.saved || 0;
+      
+      const dupesEl = document.getElementById("active-job-dupes");
+      if (dupesEl) dupesEl.textContent = job.duplicates || 0;
+      
+      const errorsEl = document.getElementById("active-job-errors");
+      if (errorsEl) errorsEl.textContent = job.errors || 0;
+    } else {
+      if (activeJobContainer) activeJobContainer.style.display = "none";
+      if (noActiveJobPlaceholder) noActiveJobPlaceholder.style.display = "block";
+    }
+    
+    // 2. Fetch recent collection jobs list
+    const recentRes = await fetch(`${API_BASE}/collection-jobs/recent`);
+    const recentData = await recentRes.json();
+    const recentJobsList = document.getElementById("recent-jobs-list");
+    
+    if (recentJobsList) {
+      recentJobsList.innerHTML = "";
+      const jobs = recentData.jobs || [];
+      
+      // Filter out any active jobs from the history list to keep it clean
+      const historyJobs = jobs.filter(j => !["running", "paused", "queued", "starting"].includes(j.status));
+      
+      if (historyJobs.length === 0) {
+        recentJobsList.innerHTML = `<div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 12px; background: rgba(255,255,255,0.01); border-radius: 4px;">No completed jobs yet.</div>`;
+      } else {
+        historyJobs.forEach(job => {
+          const row = document.createElement("div");
+          row.style.cssText = "padding: 8px 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 4px; display: flex; flex-direction: column; gap: 4px; font-size: 11px;";
+          
+          let durationStr = "—";
+          if (job.duration) {
+            const minutes = Math.floor(job.duration / 60);
+            const seconds = Math.round(job.duration % 60);
+            durationStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+          }
+          
+          const sourceSiteLabel = job.source === "googlemaps" ? "Google Maps" : (job.source === "indiamart" ? "IndiaMART" : (job.source === "justdial" ? "Justdial" : job.source));
+          const badgeBg = job.status === "completed" ? "rgba(74,222,128,0.15)" : "rgba(248,113,113,0.15)";
+          const badgeColor = job.status === "completed" ? "#4ade80" : "#f87171";
+          
+          row.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <strong style="color: var(--text);">${job.job_id}</strong>
+              <span style="font-size: 9px; padding: 2px 5px; border-radius: 3px; background: ${badgeBg}; color: ${badgeColor}; font-weight: bold; text-transform: uppercase;">${job.status}</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 4px; color: var(--text-muted);">
+              <div>Source: <span style="color: var(--text);">${sourceSiteLabel} (${job.mode})</span></div>
+              <div style="text-align: right;">Time: <span style="color: var(--text);">${durationStr}</span></div>
+            </div>
+            <div style="color: var(--text-muted); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+              Query: <span style="color: var(--text); font-weight: 500;">"${job.search_query || job.search_keyword || "—"}"</span>
+            </div>
+            <div style="display: flex; gap: 12px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 4px;">
+              <div>Saved: <strong style="color: #4ade80;">${job.saved}</strong></div>
+              <div>Dupes: <strong style="color: #fbbf24;">${job.duplicates}</strong></div>
+              <div>Errors: <strong style="color: #f87171;">${job.errors}</strong></div>
+            </div>
+          `;
+          recentJobsList.appendChild(row);
+        });
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load collection jobs tracker", err);
   }
 }
 
@@ -179,6 +373,16 @@ function formatTimeAgo(dateStr) {
 // ============================================================
 // DATA CAPSULE DETAIL WORKSPACE CONTROLLER
 // ============================================================
+let currentWorkspaceLeads = [];
+let workspaceSearchQuery = "";
+
+const CAPSULE_LABELS = {
+  indiamart:  "IndiaMART",
+  googlemaps: "Google Maps",
+  justdial:   "Justdial",
+  tradeindia: "TradeIndia"
+};
+
 async function openCapsuleWorkspace(sourceSite) {
   currentSelectedCapsule = sourceSite;
   window.location.hash = `batches`;
@@ -186,37 +390,180 @@ async function openCapsuleWorkspace(sourceSite) {
   // Show detail view container, hide grid view
   document.getElementById("capsules-grid-view").classList.add("hidden");
   document.getElementById("capsule-detail-view").classList.remove("hidden");
+  document.getElementById("page-title").textContent = `${CAPSULE_LABELS[sourceSite] || sourceSite} Workspace`;
 
-  // Reset tab active state to Collection History
-  const btnShowHistory = document.getElementById("btn-show-history");
-  const btnShowUrls = document.getElementById("btn-show-urls");
-  const btnShowReview = document.getElementById("btn-show-review");
-  const historyWrapper = document.getElementById("detail-history-wrapper");
-  const urlsWrapper = document.getElementById("detail-urls-wrapper");
-  const reviewWrapper = document.getElementById("detail-review-wrapper");
+  // Set Source Name in UI
+  document.getElementById("workspace-source-name").textContent = `${CAPSULE_LABELS[sourceSite] || sourceSite} Workspace`;
 
-  btnShowHistory.className = "btn btn-primary";
-  btnShowHistory.style.color = "#000";
-  btnShowUrls.className = "btn btn-ghost";
-  btnShowUrls.style.color = "";
-  btnShowReview.className = "btn btn-ghost";
-  btnShowReview.style.color = "";
-  historyWrapper.classList.remove("hidden");
-  urlsWrapper.classList.add("hidden");
-  reviewWrapper.classList.add("hidden");
+  // Clear search bar and query
+  const searchInput = document.getElementById("workspace-search");
+  if (searchInput) searchInput.value = "";
+  workspaceSearchQuery = "";
 
-  // Fetch batches and refresh workspace stats/tables
+  // Fetch unapproved leads
+  await loadWorkspaceLeads();
+}
+
+async function loadWorkspaceLeads() {
+  if (!currentSelectedCapsule) return;
+  
+  const tbody = document.getElementById("workspace-leads-tbody");
+  
+  // 1. Loading State
+  tbody.innerHTML = getTableSpinnerHtml(9, "Retrieving pending leads from capsule...");
+  document.getElementById("workspace-pending-count").textContent = "Loading...";
+
   try {
-    const batchRes = await fetch(`${API_BASE}/batches`);
-    const batchData = await batchRes.json();
-    const batches = batchData.batches || [];
-    refreshCapsuleWorkspace(sourceSite, batches);
+    const res = await fetch(`${API_BASE}/capsules/${currentSelectedCapsule}/leads?limit=500`);
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    const data = await res.json();
+    currentWorkspaceLeads = data.leads || [];
+
+    // Update Pending Lead Count
+    document.getElementById("workspace-pending-count").textContent = `${currentWorkspaceLeads.length} Pending Leads`;
+
+    renderWorkspaceLeads();
   } catch (err) {
-    console.error("Failed to load capsule batches", err);
+    console.error("Failed to load workspace leads:", err);
+    // 4. Error State
+    tbody.innerHTML = getTableEmptyStateHtml(9, "⚠️", "Connection Failed", "Unable to sync with local review database. Ensure backend is running.");
+    document.getElementById("workspace-pending-count").textContent = "Error";
   }
 }
 
-async function refreshCapsuleWorkspace(sourceSite, batches) {
+function renderWorkspaceLeads() {
+  const tbody = document.getElementById("workspace-leads-tbody");
+  
+  // Apply frontend search filter
+  const filtered = currentWorkspaceLeads.filter(l => {
+    if (!workspaceSearchQuery) return true;
+    const q = workspaceSearchQuery.toLowerCase();
+    return (l.business_name || "").toLowerCase().includes(q) ||
+           (l.category || "").toLowerCase().includes(q) ||
+           (l.city || "").toLowerCase().includes(q) ||
+           (l.address || "").toLowerCase().includes(q) ||
+           (l.search_keyword || "").toLowerCase().includes(q) ||
+           (l.search_location || "").toLowerCase().includes(q) ||
+           (l.search_query || "").toLowerCase().includes(q) ||
+           (l.open_status || "").toLowerCase().includes(q);
+  });
+
+  // 2. Empty State
+  if (filtered.length === 0) {
+    if (workspaceSearchQuery) {
+      tbody.innerHTML = getTableEmptyStateHtml(9, "🔍", "No Matches Found", `No pending leads match "${escHtml(workspaceSearchQuery)}".`);
+    } else {
+      tbody.innerHTML = getTableEmptyStateHtml(9, "🎉", "All Leads Processed", "No pending leads remaining in this Data Capsule.");
+    }
+    return;
+  }
+
+  // 3. Data Loaded State
+  tbody.innerHTML = filtered.map(l => {
+    const location = l.city || l.address || "—";
+    const phone = l.phone || l.primary_phone || "—";
+    const website = l.website ? `<a href="${l.website}" target="_blank" style="color: var(--accent); text-decoration: underline;">${escHtml(l.website)}</a>` : "—";
+    
+    let timeStr = "—";
+    if (l.collected_at) {
+      try {
+        let parsedStr = l.collected_at;
+        if (!parsedStr.endsWith("Z") && !parsedStr.includes("+")) {
+          parsedStr += "Z";
+        }
+        timeStr = new Date(parsedStr).toLocaleString("en-IN", { hour12: true });
+      } catch {
+        timeStr = l.collected_at;
+      }
+    }
+
+    const score = calculateLeadCompleteness(l);
+    const quality = getLeadQualityBadge(score);
+    let qualityClass = "badge-quality-low";
+    if (score >= 80) qualityClass = "badge-quality-high";
+    else if (score >= 60) qualityClass = "badge-quality-medium";
+
+    const qualityHtml = `
+      <div class="status-badge ${qualityClass}" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px;">
+        <span>${score}%</span>
+        <span style="font-size: 8px;">${quality.stars}</span>
+      </div>
+    `;
+
+    return `
+      <tr style="border-bottom: 1px solid #111;">
+        <td style="padding: 12px 16px;">
+          <input type="checkbox" class="workspace-row-checkbox" data-id="${l.lead_id}" ${selectedCapsuleLeads.has(l.lead_id) ? "checked" : ""} />
+        </td>
+        <td style="padding: 12px 16px; font-weight: 700; color: var(--text);"><a href="#" onclick="openLeadModal('${l.lead_id}'); return false;" style="color:var(--text); text-decoration:underline;">${escHtml(l.business_name)}</a></td>
+        <td style="padding: 12px 16px; color: var(--text-muted);">${escHtml(l.category || "—")}</td>
+        <td style="padding: 12px 16px; color: var(--text-muted);">${escHtml(location)}</td>
+        <td style="padding: 12px 16px; color: var(--text-muted);">${escHtml(phone)}</td>
+        <td style="padding: 12px 16px; color: var(--text-muted);">${website}</td>
+        <td style="padding: 12px 16px; color: var(--text-muted); font-size: 11px;">${escHtml(timeStr)}</td>
+        <td style="padding: 12px 16px;">${qualityHtml}</td>
+        <td style="padding: 12px 16px;">
+          <span style="display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: bold; background: rgba(234, 67, 53, 0.1); color: #ea4335; border-radius: 3px;">Pending</span>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  // Row checkboxes listener
+  tbody.querySelectorAll(".workspace-row-checkbox").forEach(cb => {
+    cb.addEventListener("change", (e) => {
+      const id = e.target.getAttribute("data-id");
+      if (e.target.checked) {
+        selectedCapsuleLeads.add(id);
+      } else {
+        selectedCapsuleLeads.delete(id);
+      }
+      updateWorkspaceSelectionBar();
+    });
+  });
+
+  // Header checkbox listener
+  const headerCheckbox = document.getElementById("workspace-select-all");
+  if (headerCheckbox) {
+    headerCheckbox.checked = filtered.length > 0 && filtered.every(l => selectedCapsuleLeads.has(l.lead_id));
+    headerCheckbox.onchange = (e) => {
+      const checked = e.target.checked;
+      filtered.forEach(l => {
+        if (checked) {
+          selectedCapsuleLeads.add(l.lead_id);
+        } else {
+          selectedCapsuleLeads.delete(l.lead_id);
+        }
+      });
+      renderWorkspaceLeads();
+    };
+  }
+
+  updateWorkspaceSelectionBar();
+}
+
+function updateWorkspaceSelectionBar() {
+  const bar = document.getElementById("workspace-bulk-bar");
+  const countSpan = document.getElementById("workspace-selected-count");
+  if (!bar || !countSpan) return;
+
+  const count = selectedCapsuleLeads.size;
+  countSpan.textContent = count;
+
+  if (count > 0) {
+    bar.classList.remove("hidden");
+  } else {
+    bar.classList.add("hidden");
+  }
+}
+
+function refreshCapsuleWorkspace(sourceSite, batches) {
+  loadWorkspaceLeads();
+}
+window.refreshCapsuleWorkspace = refreshCapsuleWorkspace;
+
+// Legacy capsule functions start
+async function refreshCapsuleWorkspace_legacy(sourceSite, batches) {
   // Update header text
   const labels = {
     indiamart:  "IndiaMART",
@@ -600,7 +947,7 @@ async function loadReviewQueue() {
   try {
     const res = await fetch(`${API_BASE}/capsules/${currentSelectedCapsule}/leads?limit=500`);
     const data = await res.json();
-    const leads = data || [];
+    const leads = data.leads || [];
 
     if (leads.length === 0) {
       tbody.innerHTML = `<tr><td colspan="7" class="tbl-empty">No leads pending review.</td></tr>`;
@@ -741,40 +1088,35 @@ async function rejectSelectedLeadsAction() {
   }
 }
 
-// Expose review action handlers to global window context
-window.approveSingleLeadAction = approveSingleLeadAction;
-window.rejectSingleLeadAction  = rejectSingleLeadAction;
-window.loadReviewQueue         = loadReviewQueue;
+// Expose review action handlers to global window context (legacy)
+window.approveSingleLeadAction_legacy = approveSingleLeadAction;
+window.rejectSingleLeadAction_legacy  = rejectSingleLeadAction;
+window.loadReviewQueue_legacy         = loadReviewQueue;
 
 // ============================================================
 // LOAD ALL LEADS
 // ============================================================
 async function loadLeads() {
   const tbody = document.getElementById("leads-tbody");
-  tbody.innerHTML = `<tr><td colspan="9" class="table-loading">Loading leads...</td></tr>`;
-
-  // Hide bulk actions bar
-  document.getElementById("bulk-action-bar").style.bottom = "-80px";
-  document.getElementById("select-all").checked = false;
+  
+  // 1. Loading State
+  tbody.innerHTML = getTableSpinnerHtml(11, "Retrieving leads database...");
 
   try {
-    // Build query params from filters
-    const params = new URLSearchParams({ limit: 500 });
-    if (filters.search) params.set("search",      filters.search);
-    if (filters.source) params.set("source_site", filters.source);
-    if (filters.status) params.set("lead_status", filters.status);
-    if (filters.city)   params.set("city",        filters.city);
-
-    const res  = await fetch(`${API_BASE}/leads?${params}`);
+    // Fetch all approved leads
+    const res = await fetch(`${API_BASE}/leads?limit=500`);
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const data = await res.json();
-    allLeads   = data.leads || [];
+    allLeads = data.leads || [];
 
     // Client-side Sort
     sortLeads();
 
     renderLeadsPage();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="9" class="tbl-empty" style="color:#ff4444;">Failed to sync with local leads database.</td></tr>`;
+    console.error("Failed to load leads:", err);
+    // Error State
+    tbody.innerHTML = getTableEmptyStateHtml(11, "⚠️", "Connection Failed", "Unable to sync with local leads database. Ensure backend is running.");
   }
 }
 
@@ -790,70 +1132,272 @@ function sortLeads() {
   }
 }
 
-// ============================================================
-// RENDER CURRENT PAGE OF LEADS
-// ============================================================
 function renderLeadsPage() {
-  const tbody    = document.getElementById("leads-tbody");
-  const start    = (currentPage - 1) * PAGE_SIZE;
-  const end      = start + PAGE_SIZE;
-  const paginated = allLeads.slice(start, end);
+  const tbody = document.getElementById("leads-tbody");
 
-  if (paginated.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="table-loading">No leads found matching the filters.</td></tr>`;
-    updatePagination();
+  // Apply search and filters on the client side
+  const filteredLeads = allLeads.filter(lead => {
+    // A. Search Query
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      const nameMatch = (lead.business_name || "").toLowerCase().includes(q);
+      const phoneMatch = (lead.phone || "").toLowerCase().includes(q) || (lead.primary_phone || "").toLowerCase().includes(q);
+      const websiteMatch = (lead.website || "").toLowerCase().includes(q);
+      const cityMatch = (lead.city || "").toLowerCase().includes(q);
+      const categoryMatch = (lead.category || "").toLowerCase().includes(q);
+      const keywordMatch = (lead.search_keyword || "").toLowerCase().includes(q);
+      const locationMatch = (lead.search_location || "").toLowerCase().includes(q);
+      const queryMatch = (lead.search_query || "").toLowerCase().includes(q);
+      const openStatusMatch = (lead.open_status || "").toLowerCase().includes(q);
+      
+      if (!nameMatch && !phoneMatch && !websiteMatch && !cityMatch && !categoryMatch && !keywordMatch && !locationMatch && !queryMatch && !openStatusMatch) {
+        return false;
+      }
+    }
+
+    // B. Source Filter
+    if (filters.source && lead.source_site !== filters.source) {
+      return false;
+    }
+
+    // C. Status Filter
+    if (filters.status && lead.lead_status !== filters.status) {
+      return false;
+    }
+
+    // D. Collection Mode Filter
+    if (filters.mode && lead.collection_mode !== filters.mode) {
+      return false;
+    }
+
+    // E. City Filter
+    if (filters.city && lead.city !== filters.city) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const totalPages = Math.ceil(filteredLeads.length / PAGE_SIZE);
+  if (currentPage > totalPages) {
+    currentPage = Math.max(1, totalPages);
+  }
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+  const paginated = filteredLeads.slice(start, end);
+
+  // 2. Empty State
+  if (filteredLeads.length === 0) {
+    if (allLeads.length === 0) {
+      tbody.innerHTML = getTableEmptyStateHtml(11, "🗂️", "No Approved Leads", "Approve leads inside the Data Capsules workspace to build your database.");
+    } else {
+      tbody.innerHTML = getTableEmptyStateHtml(11, "🔍", "No Matches Found", "No leads match your search query and filter criteria.");
+    }
+    document.getElementById("page-info").textContent = "Page 1 of 1";
+    document.getElementById("btn-prev").disabled = true;
+    document.getElementById("btn-next").disabled = true;
     return;
   }
 
+  // 3. Data Loaded State
   tbody.innerHTML = paginated.map(lead => {
-    // Simple inline duplicate check
-    const isDuplicate = allLeads.filter(l => l.business_name.toLowerCase() === lead.business_name.toLowerCase()).length > 1;
-    const dupBadge = isDuplicate ? `<span style="background:var(--accent); color:#000; padding:1px 4px; border-radius:3px; font-size:8px; margin-left:6px; font-weight:700;">Duplicate</span>` : "";
+    const location = lead.city || lead.address || "—";
+    const phone = lead.phone || lead.primary_phone || "—";
+    const website = lead.website ? `<a href="${lead.website}" target="_blank" style="color: var(--accent); text-decoration: underline;">${escHtml(lead.website)}</a>` : "—";
+    
+    let timeStr = "—";
+    if (lead.collected_at) {
+      try {
+        let parsedStr = lead.collected_at;
+        if (!parsedStr.endsWith("Z") && !parsedStr.includes("+")) {
+          parsedStr += "Z";
+        }
+        timeStr = new Date(parsedStr).toLocaleString("en-IN", { hour12: true });
+      } catch {
+        timeStr = lead.collected_at;
+      }
+    }
+
+    const modeLabel = lead.collection_mode === "deep" ? "Deep Collect" : "Quick Collect";
+    const statusLabel = lead.lead_status.charAt(0).toUpperCase() + lead.lead_status.slice(1);
+
+    const score = calculateLeadCompleteness(lead);
+    const quality = getLeadQualityBadge(score);
+    let qualityClass = "badge-quality-low";
+    if (score >= 80) qualityClass = "badge-quality-high";
+    else if (score >= 60) qualityClass = "badge-quality-medium";
+
+    const qualityHtml = `
+      <div class="status-badge ${qualityClass}" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px;">
+        <span>${score}%</span>
+        <span style="font-size: 8px;">${quality.stars}</span>
+      </div>
+    `;
 
     return `
-      <tr data-lead-id="${lead.lead_id}">
-        <td><input type="checkbox" class="lead-checkbox" data-id="${lead.lead_id}" /></td>
-
-        <td>
-          <div class="business-name" onclick="openLeadModal('${lead.lead_id}')" style="cursor: pointer;">
-            ${escHtml(lead.business_name)} ${dupBadge}
-          </div>
-          ${lead.category ? `<div class="business-sub">${escHtml(lead.category)}</div>` : ""}
+      <tr style="border-bottom: 1px solid #111;">
+        <td style="padding: 12px 16px;">
+          <input type="checkbox" class="leads-row-checkbox" data-id="${lead.lead_id}" ${selectedMainLeads.has(lead.lead_id) ? "checked" : ""} />
         </td>
-
-        <td>${escHtml(lead.phone || "—")}</td>
-        <td>${escHtml(lead.email || "—")}</td>
-        <td>${escHtml(lead.city || "—")}</td>
-
-        <td>
+        <td style="padding: 12px 16px; font-weight: 700; color: var(--text);">
+          <a href="#" onclick="openLeadModal('${lead.lead_id}'); return false;" style="color: var(--text); text-decoration: underline;">
+            ${escHtml(lead.business_name)}
+          </a>
+        </td>
+        <td style="padding: 12px 16px; color: var(--text-muted);">${escHtml(lead.category || "—")}</td>
+        <td style="padding: 12px 16px; color: var(--text-muted);">${escHtml(location)}</td>
+        <td style="padding: 12px 16px; color: var(--text-muted);">${escHtml(phone)}</td>
+        <td style="padding: 12px 16px; color: var(--text-muted);">${website}</td>
+        <td style="padding: 12px 16px;">
           <span class="source-badge source-${lead.source_site}">
             ${sourceLabel(lead.source_site)}
           </span>
         </td>
-
-        <td>
-          <select
-            class="status-select status-${lead.lead_status}"
-            onchange="updateStatus('${lead.lead_id}', this.value, this)"
-          >
-            <option value="new"       ${lead.lead_status === "new"       ? "selected" : ""}>New</option>
-            <option value="contacted" ${lead.lead_status === "contacted" ? "selected" : ""}>Contacted</option>
-            <option value="qualified" ${lead.lead_status === "qualified" ? "selected" : ""}>Qualified</option>
-            <option value="closed"    ${lead.lead_status === "closed"    ? "selected" : ""}>Closed</option>
-          </select>
-        </td>
-
-        <td>${formatDate(lead.collected_at)}</td>
-
-        <td>
-          <button class="btn btn-danger" onclick="deleteLead('${lead.lead_id}', this)">🗑</button>
+        <td style="padding: 12px 16px; color: var(--text-muted);">${escHtml(modeLabel)}</td>
+        <td style="padding: 12px 16px; color: var(--text-muted); font-size: 11px;">${escHtml(timeStr)}</td>
+        <td style="padding: 12px 16px;">${qualityHtml}</td>
+        <td style="padding: 12px 16px;">
+          <span style="display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: bold; background: rgba(74, 222, 128, 0.1); color: #4ade80; border-radius: 3px;">
+            ${statusLabel}
+          </span>
         </td>
       </tr>
     `;
   }).join("");
 
-  updatePagination();
-  setupCheckboxListeners();
+  // Row checkboxes listener
+  tbody.querySelectorAll(".leads-row-checkbox").forEach(cb => {
+    cb.addEventListener("change", (e) => {
+      const id = e.target.getAttribute("data-id");
+      if (e.target.checked) {
+        selectedMainLeads.add(id);
+      } else {
+        selectedMainLeads.delete(id);
+      }
+      updateMainLeadsSelectionBar();
+    });
+  });
+
+  // Header checkbox listener
+  const headerCheckbox = document.getElementById("leads-select-all");
+  if (headerCheckbox) {
+    headerCheckbox.checked = paginated.length > 0 && paginated.every(l => selectedMainLeads.has(l.lead_id));
+    headerCheckbox.onchange = (e) => {
+      const checked = e.target.checked;
+      paginated.forEach(l => {
+        if (checked) {
+          selectedMainLeads.add(l.lead_id);
+        } else {
+          selectedMainLeads.delete(l.lead_id);
+        }
+      });
+      renderLeadsPage();
+    };
+  }
+
+  // Update pagination controls
+  document.getElementById("page-info").textContent = `Page ${currentPage} of ${totalPages}`;
+  document.getElementById("btn-prev").disabled = currentPage <= 1;
+  document.getElementById("btn-next").disabled = currentPage >= totalPages;
+
+  updateMainLeadsSelectionBar();
+}
+
+function updateMainLeadsSelectionBar() {
+  const bar = document.getElementById("leads-bulk-bar");
+  const countSpan = document.getElementById("leads-selected-count");
+  if (!bar || !countSpan) return;
+
+  const count = selectedMainLeads.size;
+  countSpan.textContent = count;
+
+  if (count > 0) {
+    bar.classList.remove("hidden");
+  } else {
+    bar.classList.add("hidden");
+  }
+}
+
+async function bulkApproveWorkspaceLeads() {
+  if (selectedCapsuleLeads.size === 0) return;
+  const leadIds = Array.from(selectedCapsuleLeads);
+
+  try {
+    const res = await fetch(`${API_BASE}/leads/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_ids: leadIds })
+    });
+    if (!res.ok) throw new Error("Bulk approval request failed");
+
+    selectedCapsuleLeads.clear();
+    const headerCheckbox = document.getElementById("workspace-select-all");
+    if (headerCheckbox) headerCheckbox.checked = false;
+
+    // Refresh views
+    await loadWorkspaceLeads(currentSelectedCapsule);
+    await loadStats();
+    await loadLeads();
+
+    alert(`Successfully approved ${leadIds.length} leads!`);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to approve selected leads.");
+  }
+}
+
+async function bulkDeleteWorkspaceLeads() {
+  if (selectedCapsuleLeads.size === 0) return;
+  if (!confirm(`Are you sure you want to permanently delete the ${selectedCapsuleLeads.size} selected leads?`)) {
+    return;
+  }
+  const leadIds = Array.from(selectedCapsuleLeads);
+
+  try {
+    await Promise.all(leadIds.map(leadId => 
+      fetch(`${API_BASE}/leads/${leadId}`, { method: "DELETE" })
+    ));
+
+    selectedCapsuleLeads.clear();
+    const headerCheckbox = document.getElementById("workspace-select-all");
+    if (headerCheckbox) headerCheckbox.checked = false;
+
+    await loadWorkspaceLeads(currentSelectedCapsule);
+    await loadStats();
+    await loadLeads();
+
+    alert(`Successfully deleted ${leadIds.length} leads!`);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to delete selected leads.");
+  }
+}
+
+async function bulkDeleteMainLeads() {
+  if (selectedMainLeads.size === 0) return;
+  if (!confirm(`Are you sure you want to permanently delete the ${selectedMainLeads.size} selected leads from the database?`)) {
+    return;
+  }
+  const leadIds = Array.from(selectedMainLeads);
+
+  try {
+    await Promise.all(leadIds.map(leadId => 
+      fetch(`${API_BASE}/leads/${leadId}`, { method: "DELETE" })
+    ));
+
+    selectedMainLeads.clear();
+    const headerCheckbox = document.getElementById("leads-select-all");
+    if (headerCheckbox) headerCheckbox.checked = false;
+
+    await loadStats();
+    await loadLeads();
+
+    alert(`Successfully deleted ${leadIds.length} leads!`);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to delete selected leads.");
+  }
 }
 
 // ============================================================
@@ -868,240 +1412,51 @@ function updatePagination() {
 }
 
 // ============================================================
-// CHECKBOX LISTENERS & BULK PANEL
-// ============================================================
-function setupCheckboxListeners() {
-  const selectAll = document.getElementById("select-all");
-  const checkboxes = document.querySelectorAll(".lead-checkbox");
-  const bulkBar = document.getElementById("bulk-action-bar");
-  const countLabel = document.getElementById("bulk-selected-count");
-  const dupTag = document.getElementById("bulk-dup-tag");
-
-  checkboxes.forEach(cb => {
-    cb.addEventListener("change", updateBulkBarState);
-  });
-
-  function updateBulkBarState() {
-    const checked = document.querySelectorAll(".lead-checkbox:checked");
-    if (checked.length > 0) {
-      countLabel.textContent = `${checked.length} selected`;
-      bulkBar.style.bottom = "20px";
-
-      // Detect duplicates inside selected items
-      let names = new Set();
-      let hasDuplicates = false;
-      checked.forEach(c => {
-        const row = c.closest("tr");
-        const nameNode = row.querySelector(".business-name");
-        const name = nameNode ? nameNode.textContent.trim().toLowerCase() : "";
-        if (name && names.has(name)) {
-          hasDuplicates = true;
-        } else {
-          names.add(name);
-        }
-      });
-      dupTag.style.display = hasDuplicates ? "inline-block" : "none";
-    } else {
-      bulkBar.style.bottom = "-80px";
-      selectAll.checked = false;
-    }
-  }
-}
-
-// ============================================================
-// UPDATE LEAD STATUS
-// ============================================================
-async function updateStatus(leadId, newStatus, selectEl) {
-  // Update CSS class on the select element immediately for visual feedback
-  selectEl.className = `status-select status-${newStatus}`;
-
-  try {
-    await fetch(`${API_BASE}/leads/${leadId}/status`, {
-      method:  "PUT",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ lead_status: newStatus })
-    });
-    
-    // Live update broadcast
-    broadcastStateUpdate();
-    loadStats();
-  } catch {
-    alert("Failed to update status. Check backend connection.");
-  }
-}
-
-// ============================================================
-// DELETE LEAD
-// ============================================================
-async function deleteLead(leadId, btn) {
-  if (!confirm("Delete this lead permanently?")) return;
-
-  btn.textContent = "...";
-  btn.disabled    = true;
-
-  try {
-    // Backup for undo action
-    const record = allLeads.find(l => l.lead_id === leadId);
-    if (record) {
-      deletedLeadsBackup = [record];
-      showUndoToast();
-    }
-
-    await fetch(`${API_BASE}/leads/${leadId}`, { method: "DELETE" });
-    
-    // Remove row from DOM and local state
-    allLeads = allLeads.filter(l => l.lead_id !== leadId);
-    renderLeadsPage();
-    loadStats();
-
-    // Broadcast live state sync
-    broadcastStateUpdate();
-  } catch {
-    btn.textContent = "🗑";
-    btn.disabled    = false;
-    alert("Failed to delete. Check backend connection.");
-  }
-}
-
-// ============================================================
-// UNDO DELETE TOAST
-// ============================================================
-function showUndoToast() {
-  const existing = document.getElementById("undo-toast");
-  if (existing) existing.remove();
-
-  const toast = document.createElement("div");
-  toast.id = "undo-toast";
-  toast.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 6px;
-    padding: 10px 16px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    z-index: 10000;
-    font-size: 11px;
-    color: var(--text);
-  `;
-  toast.innerHTML = `
-    <span>Lead deleted.</span>
-    <button class="btn btn-ghost" id="btn-undo-delete" style="padding: 2px 6px; margin: 0; color: var(--accent);">Undo</button>
-  `;
-  document.body.appendChild(toast);
-
-  document.getElementById("btn-undo-delete").addEventListener("click", async () => {
-    if (deletedLeadsBackup.length > 0) {
-      const lead = deletedLeadsBackup[0];
-      try {
-        await fetch(`${API_BASE}/leads`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(lead)
-        });
-        toast.remove();
-        loadLeads();
-        loadStats();
-        
-        // Broadcast restore live state sync
-        broadcastStateUpdate();
-      } catch (err) {
-        alert("Failed to restore lead: " + err.message);
-      }
-    }
-  });
-
-  setTimeout(() => {
-    if (document.body.contains(toast)) toast.remove();
-  }, 5000);
-}
-
-// ============================================================
-// BULK ACTIONS HANDLERS
-// ============================================================
-async function deleteSelectedLeads() {
-  const checked = document.querySelectorAll(".lead-checkbox:checked");
-  if (checked.length === 0) return;
-  if (!confirm(`Permanently delete all ${checked.length} selected leads?`)) return;
-
-  const deletedIds = Array.from(checked).map(cb => cb.dataset.id);
-  const backup = allLeads.filter(l => deletedIds.includes(l.lead_id));
-
-  try {
-    deletedLeadsBackup = backup;
-    showUndoToast();
-
-    for (const id of deletedIds) {
-      await fetch(`${API_BASE}/leads/${id}`, { method: "DELETE" });
-    }
-    loadLeads();
-    loadStats();
-    
-    // Broadcast live state sync
-    broadcastStateUpdate();
-  } catch (err) {
-    alert("Bulk delete failed.");
-  }
-}
-
-async function updateSelectedStatus(status) {
-  if (!status) return;
-  const checked = document.querySelectorAll(".lead-checkbox:checked");
-  if (checked.length === 0) return;
-
-  const selectedIds = Array.from(checked).map(cb => cb.dataset.id);
-
-  try {
-    for (const id of selectedIds) {
-      await fetch(`${API_BASE}/leads/${id}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_status: status })
-      });
-    }
-    loadLeads();
-    loadStats();
-
-    // Broadcast live state sync
-    broadcastStateUpdate();
-  } catch (err) {
-    alert("Bulk status update failed.");
-  }
-}
-
-function mergeSelectedDuplicates() {
-  const checked = document.querySelectorAll(".lead-checkbox:checked");
-  if (checked.length < 2) {
-    alert("Please select at least 2 duplicate leads to merge.");
-    return;
-  }
-  alert("Duplicates resolved. Merged identical rows into unified B2B lead profiles.");
-  loadLeads();
-  
-  // Broadcast live state sync
-  broadcastStateUpdate();
-}
-
 // ============================================================
 // LEAD DETAIL MODAL
 // ============================================================
+function val(value) {
+  if (value === null || value === undefined || String(value).trim() === "" || String(value).trim() === "—") {
+    return `<span style="color: #666; font-style: italic;">Not Available</span>`;
+  }
+  return escHtml(String(value));
+}
+
 async function openLeadModal(leadId) {
   const overlay = document.getElementById("modal-overlay");
   const body    = document.getElementById("modal-body");
   const title   = document.getElementById("modal-business-name");
 
   overlay.classList.remove("hidden");
-  body.innerHTML = "Loading...";
+  
+  // 1. Loading State
+  body.innerHTML = getDetailSpinnerHtml("Retrieving lead metadata...");
+  title.textContent = "Inspection Panel";
 
   try {
     const res  = await fetch(`${API_BASE}/leads/${leadId}`);
+    if (res.status === 404) {
+      // 3. Lead Not Found State
+      body.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 16px; text-align: center; gap: 8px;">
+          <span style="font-size: 32px;">❓</span>
+          <div style="font-size: 13px; font-weight: 700; color: var(--text);">Lead Not Found</div>
+          <div style="font-size: 11px; color: var(--text-muted);">The lead record could not be located in the database.</div>
+        </div>
+      `;
+      return;
+    }
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    
     const data = await res.json();
     const lead = data.lead;
     const contacts = data.contacts || [];
+
+    if (!lead || !lead.business_name) {
+      // 3. Lead Not Found State
+      body.innerHTML = `<div style="padding: 24px; text-align: center; color: #ea4335; font-weight: bold;">Lead Not Found</div>`;
+      return;
+    }
 
     title.textContent = lead.business_name;
 
@@ -1109,226 +1464,451 @@ async function openLeadModal(leadId) {
     const emails    = contacts.filter(c => c.contact_type === "email").map(c => c.contact_value);
     const whatsapps = contacts.filter(c => c.contact_type === "whatsapp").map(c => c.contact_value);
 
-    body.innerHTML = `
-      ${field("Source",        sourceLabel(lead.source_site))}
-      ${field("Status",        lead.lead_status)}
-      ${field("Category",      lead.category)}
-      ${field("Contact Person",lead.contact_person)}
-      ${field("Phone",         phones.length    ? phones.map(p    => `<span class="contact-chip">📞 ${escHtml(p)}</span>`).join("") : "—")}
-      ${field("WhatsApp",      whatsapps.length ? whatsapps.map(w => `<span class="contact-chip">💬 ${escHtml(w)}</span>`).join("") : "—")}
-      ${field("Email",         emails.length    ? emails.map(e    => `<span class="contact-chip">✉️ ${escHtml(e)}</span>`).join("") : "—")}
-      ${field("Website",       lead.website     ? `<a href="${escHtml(lead.website)}" target="_blank">${escHtml(lead.website)}</a>` : "—")}
-      ${field("Address",       lead.address)}
-      ${field("City",          lead.city)}
-      ${field("State",         lead.state)}
-      ${field("Postal Code",   lead.postal_code)}
-      ${field("Listing URL",   lead.listing_url ? `<a href="${escHtml(lead.listing_url)}" target="_blank">Open →</a>` : "—")}
-      ${field("Collected At",  formatDate(lead.collected_at))}
-      ${field("Collection Mode", lead.collection_mode)}
-    `;
-  } catch {
-    body.innerHTML = "Failed to load lead details.";
-  }
-}
+    // Build the sections
+    const sectionStyle = `margin-bottom: 20px; padding: 12px; background: #0a0a0a; border: 1px solid #222; border-radius: 6px;`;
+    const headerStyle = `font-size: 12px; font-weight: bold; text-transform: uppercase; color: var(--accent); margin: 0 0 10px 0; border-bottom: 1px solid #222; padding-bottom: 6px;`;
+    const rowStyle = `display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #111; font-size: 11px;`;
+    const labelStyle = `color: var(--text-muted); font-weight: 500;`;
+    const valStyle = `color: var(--text); font-weight: 600; text-align: right; max-width: 60%; word-break: break-word;`;
 
-function field(label, value) {
-  return `
-    <div class="modal-field">
-      <div class="modal-field-label">${label}</div>
-      <div class="modal-field-value">${value || "—"}</div>
-    </div>
-  `;
-}
-
-// ============================================================
-// LOAD EXPORT HISTORY
-// ============================================================
-async function loadExportHistory() {
-  const container = document.getElementById("export-history-list");
-  if (!container) return;
-  container.innerHTML = "Loading...";
-
-  try {
-    const res  = await fetch(`${API_BASE}/export/history`);
-    const data = await res.json();
-    const exports = data.exports || [];
-
-    if (exports.length === 0) {
-      container.innerHTML = `<div style="color: var(--text-muted); font-size: 11px;">No exports yet.</div>`;
-      return;
-    }
-
-    container.innerHTML = exports.map(e => `
-      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #222; font-size: 11px;">
-        <span>${e.export_format.toUpperCase()} — ${e.record_count} leads</span>
-        <span style="color: var(--text-muted);">${formatDate(e.exported_at)}</span>
+    const row = (lbl, value) => `
+      <div style="${rowStyle}">
+        <span style="${labelStyle}">${lbl}</span>
+        <span style="${valStyle}">${value}</span>
       </div>
-    `).join("");
-  } catch {
-    container.innerHTML = `<div style="color: #ff4444;">Failed to load export history.</div>`;
-  }
-}
+    `;
 
-// ============================================================
-// EXPORT LAUNCHERS
-// ============================================================
-async function doExport(format) {
-  const payload = {
-    batch_id:      null,
-    source_site:   filters.source || null,
-    lead_status:   filters.status || null
-  };
+    const score = calculateLeadCompleteness(lead);
+    const quality = getLeadQualityBadge(score);
+    const modeLabel = lead.collection_mode === "deep" ? "Deep Collect" : "Quick Collect";
+    const modeBadgeStyle = lead.collection_mode === "deep"
+      ? "background: rgba(167, 139, 250, 0.15); color: #a78bfa;"
+      : "background: rgba(96, 165, 250, 0.15); color: #60a5fa;";
+      
+    // Needs Enrichment label
+    const needsEnrichmentHtml = score < 60
+      ? `<span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: bold; margin-left: 10px;">Needs Enrichment</span>`
+      : "";
 
-  try {
-    const res = await fetch(`${API_BASE}/export/${format}`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(payload)
-    });
+    // Information Checklist
+    const chk = (name, isAvailable) => {
+      const icon = isAvailable ? `<span style="color: #4ade80; font-weight: bold; margin-right: 4px;">✓</span>` : `<span style="color: #ef4444; font-weight: bold; margin-right: 4px;">✗</span>`;
+      const color = isAvailable ? "var(--text)" : "var(--text-muted)";
+      return `<div style="display: flex; align-items: center; font-size: 11px; margin: 4px 0; color: ${color};">${icon} ${name}</div>`;
+    };
 
-    if (!res.ok) {
-      alert("Failed to export: " + res.statusText);
-      return;
-    }
+    const hasPhone = !!(lead.phone || lead.primary_phone || phones.length);
+    const hasEmail = !!(lead.email || lead.primary_email || emails.length);
+    const hasWebsite = !!lead.website;
+    const hasAddress = !!lead.address;
+    const hasRating = !!(lead.rating && lead.rating > 0);
+    const hasContact = !!lead.contact_person;
+    const hasDescription = !!lead.service_name;
 
-    const blob     = await res.blob();
-    const url      = URL.createObjectURL(blob);
-    const a        = document.createElement("a");
-    a.href         = url;
-    a.download     = `prospectlens_export_${Date.now()}.${format}`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    // Refresh export history
-    loadExportHistory();
+    const checklistHtml = `
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 10px; border-top: 1px solid #222; padding-top: 10px;">
+        ${chk("Phone", hasPhone)}
+        ${chk("Website", hasWebsite)}
+        ${chk("Email", hasEmail)}
+        ${chk("Address", hasAddress)}
+        ${chk("Rating", hasRating)}
+        ${chk("Contact Person", hasContact)}
+        ${chk("Description", hasDescription)}
+      </div>
+    `;
+
+    // 4. Data Loaded State
+    body.innerHTML = `
+      <!-- Back Button -->
+      <button class="btn btn-ghost" onclick="document.getElementById('modal-overlay').classList.add('hidden');" style="margin-bottom: 16px; padding: 6px 12px; font-size: 11px; display: flex; align-items: center; gap: 6px;">
+        ← Back to Leads Table
+      </button>
+
+      <!-- Lead Quality & Completeness Card -->
+      <div style="${sectionStyle}">
+        <h3 style="${headerStyle}">Lead Quality & Completeness</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div>
+            <span style="font-size: 14px; font-weight: bold; color: var(--text);">${score}% Completeness</span>
+            ${needsEnrichmentHtml}
+          </div>
+          <span style="font-size: 11px; font-weight: bold; padding: 2px 6px; border-radius: 4px; ${modeBadgeStyle}">
+            ${modeLabel}
+          </span>
+        </div>
+        
+        <!-- Completeness Meter -->
+        <div style="width: 100%; height: 6px; background: #222; border-radius: 3px; overflow: hidden; margin-bottom: 12px;">
+          <div style="width: ${score}%; height: 100%; background: ${quality.color}; border-radius: 3px;"></div>
+        </div>
+
+        <div style="${rowStyle} border-bottom: none; padding: 0;">
+          <span style="${labelStyle}">Quality Rating</span>
+          <span style="color: ${quality.color}; font-weight: bold; font-size: 12px;">
+            ${quality.stars} (${quality.label})
+          </span>
+        </div>
+
+        ${checklistHtml}
+      </div>
+
+      <!-- Business Information -->
+      <div style="${sectionStyle}">
+        <h3 style="${headerStyle}">Business Information</h3>
+        ${row("Business Name", val(lead.business_name))}
+        ${row("Category", val(lead.category))}
+        ${row("Sub Category", val(lead.sub_category))}
+        ${row("Description", val(lead.service_name))}
+        ${row("Rating", val(lead.rating))}
+        ${row("Review Count", val(lead.review_count))}
+        ${row("Open Status", val(lead.open_status))}
+        ${row("Price Level", val(lead.price_level))}
+        ${row("Displayed Price", val(lead.displayed_price))}
+        ${row("Price Type", val(lead.price_type))}
+        ${row("Website Domain", val(lead.website_domain))}
+        ${row("Business Status", val(lead.status))}
+      </div>
+
+      <!-- Contact Information -->
+      <div style="${sectionStyle}">
+        <h3 style="${headerStyle}">Contact Information</h3>
+        ${row("Contact Person", val(lead.contact_person))}
+        ${row("Phone Numbers", phones.length ? phones.map(p => `<span style="display:inline-block; background:#222; padding:2px 6px; border-radius:3px; margin:2px;">📞 ${escHtml(p)}</span>`).join("") : val(null))}
+        ${row("Secondary Phones", val(lead.secondary_phones))}
+        ${row("WhatsApp Contacts", whatsapps.length ? whatsapps.map(w => `<span style="display:inline-block; background:#222; padding:2px 6px; border-radius:3px; margin:2px;">💬 ${escHtml(w)}</span>`).join("") : val(null))}
+        ${row("Email Addresses", emails.length ? emails.map(e => `<span style="display:inline-block; background:#222; padding:2px 6px; border-radius:3px; margin:2px;">✉️ ${escHtml(e)}</span>`).join("") : val(null))}
+      </div>
+
+      <!-- Location -->
+      <div style="${sectionStyle}">
+        <h3 style="${headerStyle}">Location Details</h3>
+        ${row("Address", val(lead.address))}
+        ${row("City", val(lead.city))}
+        ${row("State", val(lead.state))}
+        ${row("Country", val(lead.country))}
+        ${row("Pincode", val(lead.postal_code))}
+      </div>
+
+      <!-- Online Presence -->
+      <div style="${sectionStyle}">
+        <h3 style="${headerStyle}">Online Presence</h3>
+        ${row("Website", lead.website ? `<a href="${lead.website}" target="_blank" style="color:var(--accent); text-decoration:underline;">${escHtml(lead.website)}</a>` : val(null))}
+        ${row("Google Maps URL", lead.listing_url ? `<a href="${lead.listing_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">Open Maps →</a>` : val(null))}
+        ${row("Business Profile URL", lead.business_profile_url ? `<a href="${lead.business_profile_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">Open Profile →</a>` : val(null))}
+      </div>
+
+      <!-- Collection Information -->
+      <div style="${sectionStyle}">
+        <h3 style="${headerStyle}">Collection Information</h3>
+        ${row("Source Site", val(sourceLabel(lead.source_site)))}
+        ${row("Source Business ID", val(lead.source_business_id))}
+        ${row("Collector Version", val(lead.collector_version))}
+        ${row("Collection Mode", val(lead.collection_mode))}
+        ${row("Search Query", val(lead.search_query))}
+        ${row("Search Keyword", val(lead.search_keyword))}
+        ${row("Search Location", val(lead.search_location))}
+        ${row("Search URL", lead.directory_search_url ? `<a href="${lead.directory_search_url}" target="_blank" style="color:var(--accent); text-decoration:underline; word-break: break-all;">Open Search URL →</a>` : val(null))}
+        ${row("Collection Date", val(lead.collection_date))}
+        ${row("Collection Time", val(lead.collection_time))}
+        ${row("Collected Time", lead.collected_at ? val(new Date(lead.collected_at).toLocaleString()) : val(null))}
+        ${row("Last Updated", lead.updated_at ? val(new Date(lead.updated_at).toLocaleString()) : val(null))}
+      </div>
+
+      <!-- Additional Metadata -->
+      <div style="${sectionStyle}">
+        <h3 style="${headerStyle}">Additional Metadata</h3>
+        ${row("Completeness Score", val(lead.completeness_score))}
+        ${row("Dedup Hash", val(lead.dedup_hash))}
+        ${row("Version", val(lead.version))}
+        ${row("Batch ID", val(lead.batch_id))}
+        
+        <!-- Collapsible Raw JSON -->
+        <div style="margin-top: 12px; border-top: 1px solid #222; padding-top: 10px;">
+          <button class="btn btn-ghost" onclick="toggleRawMetadata();" style="width:100%; text-align:left; font-size:11px; padding:6px; margin:0; display:flex; justify-content:space-between;">
+            <span>[+] Raw Metadata (JSON)</span>
+          </button>
+          <pre id="raw-metadata-pre" class="hidden" style="background:#111; padding:8px; border-radius:4px; font-size:10px; color:#aaa; overflow-x:auto; margin-top:8px; text-align:left;">${escHtml(JSON.stringify(data, null, 2))}</pre>
+        </div>
+      </div>
+
+      <!-- Lead Review Actions -->
+      <div style="margin-top: 24px; display: flex; gap: 12px; align-items: center; justify-content: flex-end; border-top: 1px solid #222; padding-top: 16px;">
+        <button class="btn btn-primary" onclick="approveLeadFromPanel('${lead.lead_id}')" style="margin: 0; color: #000; font-weight: bold; padding: 8px 16px;">
+          Approve
+        </button>
+        <button class="btn btn-danger" onclick="deleteLeadFromPanel('${lead.lead_id}')" style="margin: 0; background: #ea4335; border: none; color: #fff; font-weight: bold; padding: 8px 16px;">
+          Delete
+        </button>
+        <button class="btn btn-ghost" onclick="document.getElementById('modal-overlay').classList.add('hidden');" style="margin: 0; padding: 8px 16px;">
+          Keep Pending
+        </button>
+      </div>
+    `;
+
   } catch (err) {
-    alert("Export request failed. Backend offline.");
+    console.error("Failed to load lead details:", err);
+    // 2. Error State
+    body.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 16px; text-align: center; gap: 8px;">
+        <span style="font-size: 32px;">⚠️</span>
+        <div style="font-size: 13px; font-weight: 700; color: var(--text);">Failed to Load Details</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Could not sync details from the API. Please ensure the backend is reachable.</div>
+      </div>
+    `;
   }
 }
 
-// ============================================================
-// BACKGROUND JOBS (TASKS)
-// ============================================================
-async function loadJobs() {
-  const tbody = document.getElementById("jobs-tbody");
-  tbody.innerHTML = `<tr><td colspan="6" class="table-loading">Loading tasks...</td></tr>`;
+function toggleRawMetadata() {
+  const pre = document.getElementById("raw-metadata-pre");
+  if (pre) {
+    pre.classList.toggle("hidden");
+  }
+}
 
+window.toggleRawMetadata = toggleRawMetadata;
+
+async function approveLeadFromPanel(leadId) {
   try {
-    const res  = await fetch(`${API_BASE}/jobs`);
-    const data = await res.json();
-    const jobs = data.jobs || [];
-
-    if (jobs.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">No active background tasks.</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = jobs.map(j => {
-      let progress = "";
-      if (j.status === "running") {
-        progress = `${Math.round(j.progress_percentage || 0)}%`;
-      } else {
-        progress = `${j.records_done} / ${j.records_total || 0} done`;
-      }
-
-      let actions = "";
-      if (j.status === "running") {
-        actions = `<button class="btn btn-ghost" onclick="controlJob('${j.job_id}', 'pause')">Pause</button>`;
-      } else if (j.status === "paused") {
-        actions = `
-          <button class="btn btn-primary" onclick="controlJob('${j.job_id}', 'resume')" style="color:#000;">Resume</button>
-          <button class="btn btn-danger" onclick="controlJob('${j.job_id}', 'cancel')">Cancel</button>
-        `;
-      } else {
-        actions = "—";
-      }
-
-      return `
-        <tr>
-          <td style="font-family: monospace;">#${j.job_id.slice(0, 8)}</td>
-          <td>${j.job_type === 'deep_collect' ? 'Deep Extractor' : 'Web Intelligence'}</td>
-          <td style="font-family: monospace;">#${(j.batch_id || "").slice(0, 8) || "—"}</td>
-          <td>${progress}</td>
-          <td><span class="source-badge source-${j.status === 'running' ? 'googlemaps' : (j.status === 'completed' ? 'indiamart' : 'justdial')}">${j.status}</span></td>
-          <td>${actions}</td>
-        </tr>
-      `;
-    }).join("");
-
-  } catch {
-    tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">Failed to load active tasks.</td></tr>`;
+    const res = await fetch(`${API_BASE}/leads/${leadId}/approve`, {
+      method: "POST"
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    
+    // Hide panel
+    document.getElementById("modal-overlay").classList.add("hidden");
+    
+    // Refresh all states
+    await loadWorkspaceLeads();
+    await loadStats();
+    await loadLeads();
+  } catch (err) {
+    alert("Error approving lead: " + err.message);
   }
 }
 
-async function controlJob(jobId, action) {
+async function deleteLeadFromPanel(leadId) {
+  if (!confirm("Delete this lead?")) return;
+  
   try {
-    await fetch(`${API_BASE}/jobs/${jobId}/${action}`, { method: "POST" });
-    loadJobs();
-  } catch {
-    alert("Failed to send action control command.");
+    const res = await fetch(`${API_BASE}/leads/${leadId}`, {
+      method: "DELETE"
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    
+    // Hide panel
+    document.getElementById("modal-overlay").classList.add("hidden");
+    
+    // Refresh all states
+    await loadWorkspaceLeads();
+    await loadStats();
+    await loadLeads();
+  } catch (err) {
+    alert("Error deleting lead: " + err.message);
   }
 }
 
-async function runWebsiteEnrichment() {
-  const checked = document.querySelectorAll(".lead-checkbox:checked");
-  if (checked.length === 0) {
-    alert("Please select one or more leads to enrich.");
-    return;
-  }
-  const selectedIds = Array.from(checked).map(cb => cb.dataset.id);
-  alert(`Website Intelligence enrichment task queued for ${selectedIds.length} selected leads.`);
-}
+// Expose these globally
+window.approveLeadFromPanel = approveLeadFromPanel;
+window.deleteLeadFromPanel  = deleteLeadFromPanel;
 
 // ============================================================
-// SETTINGS PERSISTENCE
+// SETTINGS & DIAGNOSTICS SYSTEM
 // ============================================================
-function loadSettings() {
+async function loadSettings() {
   document.getElementById("setting-api-url").value = localStorage.getItem("prospectlens-api-url") || "http://localhost:8000/api";
   document.getElementById("setting-gemini-key").value = localStorage.getItem("prospectlens-gemini-key") || "";
-  document.getElementById("setting-scrape-delay").value = localStorage.getItem("prospectlens-scrape-delay") || "3";
-  document.getElementById("setting-concurrency").value = localStorage.getItem("prospectlens-concurrency") || "5";
-  document.getElementById("setting-headless").checked = localStorage.getItem("prospectlens-headless") !== "false";
-  document.getElementById("setting-proxies").checked = localStorage.getItem("prospectlens-proxies") === "true";
+  
+  // Load Collection Preferences
+  document.getElementById("setting-collection-mode").value = localStorage.getItem("prospectlens-collection-mode") || "quick";
+  document.getElementById("setting-max-leads").value = localStorage.getItem("prospectlens-max-leads") || "100";
+  document.getElementById("setting-auto-refresh").checked = localStorage.getItem("prospectlens-auto-refresh") !== "false";
+  document.getElementById("setting-future-enrichment").checked = localStorage.getItem("prospectlens-future-enrichment") === "true";
+
+  // Load Appearance Preferences
+  document.getElementById("setting-appearance-theme").value = localStorage.getItem("prospectlens-appearance-theme") || "dark";
+  document.getElementById("setting-default-dashboard").value = localStorage.getItem("prospectlens-default-dashboard") || "home";
+  document.getElementById("setting-compact-table").checked = localStorage.getItem("prospectlens-compact-table") === "true";
+  document.getElementById("setting-large-rows").checked = localStorage.getItem("prospectlens-large-rows") === "true";
+
+  // Display initial diagnostics information
+  await refreshDiagnostics();
 }
 
-function saveSettings() {
-  localStorage.setItem("prospectlens-api-url", document.getElementById("setting-api-url").value.trim());
-  localStorage.setItem("prospectlens-gemini-key", document.getElementById("setting-gemini-key").value.trim());
-  localStorage.setItem("prospectlens-scrape-delay", document.getElementById("setting-scrape-delay").value);
-  localStorage.setItem("prospectlens-concurrency", document.getElementById("setting-concurrency").value);
-  localStorage.setItem("prospectlens-headless", document.getElementById("setting-headless").checked);
-  localStorage.setItem("prospectlens-proxies", document.getElementById("setting-proxies").checked);
+async function saveSettings() {
+  const apiUrl = document.getElementById("setting-api-url").value.trim();
+  localStorage.setItem("prospectlens-api-url", apiUrl);
+  API_BASE = apiUrl; // Update global variable
 
-  alert("Scraper preferences saved successfully!");
+  localStorage.setItem("prospectlens-gemini-key", document.getElementById("setting-gemini-key").value.trim());
+  localStorage.setItem("prospectlens-collection-mode", document.getElementById("setting-collection-mode").value);
+  localStorage.setItem("prospectlens-max-leads", document.getElementById("setting-max-leads").value);
+  localStorage.setItem("prospectlens-auto-refresh", document.getElementById("setting-auto-refresh").checked ? "true" : "false");
+  localStorage.setItem("prospectlens-future-enrichment", document.getElementById("setting-future-enrichment").checked ? "true" : "false");
+
+  localStorage.setItem("prospectlens-appearance-theme", document.getElementById("setting-appearance-theme").value);
+  localStorage.setItem("prospectlens-default-dashboard", document.getElementById("setting-default-dashboard").value);
+  localStorage.setItem("prospectlens-compact-table", document.getElementById("setting-compact-table").checked ? "true" : "false");
+  localStorage.setItem("prospectlens-large-rows", document.getElementById("setting-large-rows").checked ? "true" : "false");
+
+  alert("Settings & application preferences saved successfully!");
   broadcastStateUpdate();
+  await refreshDiagnostics();
+}
+
+async function testConnection() {
+  const testUrl = document.getElementById("setting-api-url").value.trim();
+  const dbStatusBadge = document.getElementById("settings-db-status-badge");
+  const backendStatusBadge = document.getElementById("settings-backend-status-badge");
+  const apiVersionLabel = document.getElementById("settings-api-version");
+  const lastSyncLabel = document.getElementById("settings-last-sync");
+
+  if (dbStatusBadge) dbStatusBadge.innerHTML = `<span class="status-badge" style="background: #e67e22; color: #fff;">Testing...</span>`;
+  if (backendStatusBadge) backendStatusBadge.innerHTML = `<span class="status-badge" style="background: #e67e22; color: #fff;">Testing...</span>`;
+
+  try {
+    const res = await fetch(`${testUrl}/health`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) throw new Error("Server returned HTTP " + res.status);
+    const data = await res.json();
+
+    if (backendStatusBadge) {
+      backendStatusBadge.innerHTML = `<span class="status-badge" style="background: #76A544; color: #fff; font-weight: bold;">Connected</span>`;
+    }
+    if (dbStatusBadge) {
+      dbStatusBadge.innerHTML = `<span class="status-badge" style="background: #76A544; color: #fff; font-weight: bold;">${data.database === "ok" ? "Connected" : "Degraded"}</span>`;
+    }
+    if (apiVersionLabel) {
+      apiVersionLabel.textContent = "v1.0.0";
+    }
+    const syncTime = new Date().toLocaleTimeString();
+    localStorage.setItem("prospectlens-last-sync", syncTime);
+    if (lastSyncLabel) {
+      lastSyncLabel.textContent = syncTime;
+    }
+    
+    alert("Connection test successful! Backend is online.");
+  } catch (err) {
+    if (backendStatusBadge) {
+      backendStatusBadge.innerHTML = `<span class="status-badge" style="background: #ea4335; color: #fff; font-weight: bold;">Disconnected</span>`;
+    }
+    if (dbStatusBadge) {
+      dbStatusBadge.innerHTML = `<span class="status-badge" style="background: #ea4335; color: #fff; font-weight: bold;">Disconnected</span>`;
+    }
+    if (apiVersionLabel) apiVersionLabel.textContent = "Unknown";
+    
+    alert("Connection test failed. Please verify the URL and backend server status.");
+  }
+}
+
+async function refreshDiagnostics() {
+  const dbStatusBadge = document.getElementById("settings-db-status-badge");
+  const backendStatusBadge = document.getElementById("settings-backend-status-badge");
+  const apiVersionLabel = document.getElementById("settings-api-version");
+  const lastSyncLabel = document.getElementById("settings-last-sync");
+
+  const dbFileStatus = document.getElementById("settings-db-file-status");
+  const totalLeadsEl = document.getElementById("settings-db-total-leads");
+  const approvedLeadsEl = document.getElementById("settings-db-approved-leads");
+  const pendingLeadsEl = document.getElementById("settings-db-pending-leads");
+  const lastCollectEl = document.getElementById("settings-db-last-collect");
+
+  if (dbStatusBadge) dbStatusBadge.innerHTML = `<span class="status-badge" style="background: #e67e22; color: #fff;">Checking...</span>`;
+  if (backendStatusBadge) backendStatusBadge.innerHTML = `<span class="status-badge" style="background: #e67e22; color: #fff;">Checking...</span>`;
+  if (dbFileStatus) dbFileStatus.textContent = "Checking...";
+
+  if (lastSyncLabel) {
+    lastSyncLabel.textContent = localStorage.getItem("prospectlens-last-sync") || "Never";
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
+    const data = await res.json();
+
+    if (backendStatusBadge) {
+      backendStatusBadge.innerHTML = `<span class="status-badge" style="background: #76A544; color: #fff; font-weight: bold;">Connected</span>`;
+    }
+    if (dbStatusBadge) {
+      dbStatusBadge.innerHTML = `<span class="status-badge" style="background: #76A544; color: #fff; font-weight: bold;">${data.database === "ok" ? "Connected" : "Degraded"}</span>`;
+    }
+    if (dbFileStatus) {
+      dbFileStatus.textContent = data.database === "ok" ? "Active (sqlite)" : "Degraded";
+    }
+    if (apiVersionLabel) {
+      apiVersionLabel.textContent = "v1.0.0";
+    }
+
+    // Now fetch database stats to fill fields
+    const statsRes = await fetch(`${API_BASE}/leads/stats`);
+    const statsData = await statsRes.json();
+
+    const approvedCount = statsData.total_leads ?? 0;
+    const totalCount = statsData.total_database_leads ?? 0;
+    const pendingCount = Math.max(0, totalCount - approvedCount);
+
+    if (totalLeadsEl) totalLeadsEl.textContent = totalCount;
+    if (approvedLeadsEl) approvedLeadsEl.textContent = approvedCount;
+    if (pendingLeadsEl) pendingLeadsEl.textContent = pendingCount;
+
+    // Fetch last collection time
+    const batchRes = await fetch(`${API_BASE}/batches`);
+    const batchData = await batchRes.json();
+    const batches = batchData.batches || [];
+    if (batches.length > 0) {
+      batches.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+      if (lastCollectEl) {
+        lastCollectEl.textContent = new Date(batches[0].started_at).toLocaleString();
+      }
+    } else {
+      if (lastCollectEl) lastCollectEl.textContent = "Never";
+    }
+
+  } catch (err) {
+    if (backendStatusBadge) {
+      backendStatusBadge.innerHTML = `<span class="status-badge" style="background: #ea4335; color: #fff; font-weight: bold;">Disconnected</span>`;
+    }
+    if (dbStatusBadge) {
+      dbStatusBadge.innerHTML = `<span class="status-badge" style="background: #ea4335; color: #fff; font-weight: bold;">Disconnected</span>`;
+    }
+    if (dbFileStatus) dbFileStatus.textContent = "Connection Failed";
+    if (apiVersionLabel) apiVersionLabel.textContent = "Unknown";
+    
+    console.warn("Diagnostics failed: backend connection offline.");
+  }
 }
 
 // ============================================================
 // VIEW NAVIGATION (TAB ROUTER)
 // ============================================================
 function showSection(sectionId) {
+  // Clear any existing poll intervals
+  if (window.homePollInterval) {
+    clearInterval(window.homePollInterval);
+    window.homePollInterval = null;
+  }
+
   // Hide all panels
-  const sections = ["leads-section", "batches-section", "jobs-section", "export-section", "webintel-section", "settings-section"];
+  const sections = ["home-section", "leads-section", "batches-section", "settings-section"];
   sections.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.add("hidden");
   });
 
-  // Hide stats cards unless on dashboard/leads
-  const statCards = document.getElementById("stat-cards");
-  if (statCards) {
-    if (sectionId === "leads" || sectionId === "batches") {
-      statCards.classList.remove("hidden");
-    } else {
-      statCards.classList.add("hidden");
-    }
-  }
-
   // Deactivate all sidebar tabs
   document.querySelectorAll(".nav-item").forEach(el => el.classList.remove("active"));
 
   // Show selected panel
-  if (sectionId === "leads") {
+  if (sectionId === "home") {
+    const homeSec = document.getElementById("home-section");
+    if (homeSec) homeSec.classList.remove("hidden");
+    const navH = document.getElementById("nav-home");
+    if (navH) navH.classList.add("active");
+    document.getElementById("page-title").textContent = "Home Dashboard";
+    loadStats();
+
+    // Poll active job every 3 seconds to show live progress
+    window.homePollInterval = setInterval(() => {
+      loadCollectionJobs();
+    }, 3000);
+  } else if (sectionId === "leads") {
     document.getElementById("leads-section").classList.remove("hidden");
     document.getElementById("nav-leads").classList.add("active");
     document.getElementById("page-title").textContent = "All Leads Database";
@@ -1337,38 +1917,61 @@ function showSection(sectionId) {
     document.getElementById("batches-section").classList.remove("hidden");
     document.getElementById("nav-batches").classList.add("active");
     document.getElementById("page-title").textContent = "Data Capsules";
-    
-    // Load default list or active selection details
     if (currentSelectedCapsule) {
       openCapsuleWorkspace(currentSelectedCapsule);
     } else {
       closeCapsuleWorkspace();
     }
-  } else if (sectionId === "webintel") {
-    document.getElementById("webintel-section").classList.remove("hidden");
-    document.getElementById("nav-webintel").classList.add("active");
-    document.getElementById("page-title").textContent = "Website Intelligence";
-  } else if (sectionId === "jobs") {
-    document.getElementById("jobs-section").classList.remove("hidden");
-    document.getElementById("nav-jobs").classList.add("active");
-    document.getElementById("page-title").textContent = "Active Tasks";
-    loadJobs();
   } else if (sectionId === "settings") {
     document.getElementById("settings-section").classList.remove("hidden");
     document.getElementById("nav-settings").classList.add("active");
-    document.getElementById("page-title").textContent = "Configurations Settings";
+    document.getElementById("page-title").textContent = "Configuration Settings";
     loadSettings();
-  } else if (sectionId === "export") {
-    document.getElementById("export-section").classList.remove("hidden");
-    document.getElementById("nav-export").classList.add("active");
-    document.getElementById("page-title").textContent = "Export Leads";
-    loadExportHistory();
   }
 }
 
 // ============================================================
 // UTILITIES
 // ============================================================
+function calculateLeadCompleteness(lead) {
+  if (!lead) return 0;
+  const fields = [
+    { name: "Business Name", value: lead.business_name },
+    { name: "Category", value: lead.category },
+    { name: "Phone", value: lead.phone || lead.primary_phone },
+    { name: "Email", value: lead.email || lead.primary_email },
+    { name: "Website", value: lead.website },
+    { name: "Address", value: lead.address },
+    { name: "City", value: lead.city },
+    { name: "State", value: lead.state },
+    { name: "Country", value: lead.country },
+    { name: "Rating", value: lead.rating },
+    { name: "Review Count", value: lead.review_count },
+    { name: "Business Profile URL", value: lead.business_profile_url },
+    { name: "Google Maps URL", value: lead.listing_url },
+    { name: "Contact Person", value: lead.contact_person },
+    { name: "Collection Mode", value: lead.collection_mode }
+  ];
+
+  let filledCount = 0;
+  fields.forEach(f => {
+    const val = f.value;
+    if (val !== undefined && val !== null && val !== "" && String(val).toLowerCase() !== "not available" && String(val).toLowerCase() !== "not found") {
+      filledCount++;
+    }
+  });
+
+  return Math.round((filledCount / fields.length) * 100);
+}
+
+function getLeadQualityBadge(score) {
+  if (score >= 90) return { stars: "★★★★★", label: "Excellent", color: "#4ade80" };
+  if (score >= 75) return { stars: "★★★★☆", label: "Very Good", color: "#60a5fa" };
+  if (score >= 60) return { stars: "★★★☆☆", label: "Good", color: "#fbbf24" };
+  if (score >= 40) return { stars: "★★☆☆☆", label: "Needs Review", color: "#f97316" };
+  return { stars: "★☆☆☆☆", label: "Poor", color: "#ef4444" };
+}
+
 function escHtml(str) {
   if (!str) return "";
   return String(str)
@@ -1409,10 +2012,31 @@ async function init() {
   await checkBackend();
   await loadStats();
 
-  // Load leads by default
-  loadLeads();
+  // Listen for background engine state changes to react dynamically
+  chrome.storage.onChanged.addListener(async (changes) => {
+    if (changes.engineState) {
+      const isOnline = await checkBackend();
+      if (isOnline) {
+        // Automatically load stats and refresh leads lists when engine becomes online
+        loadStats();
+        loadLeads();
+      }
+    }
+  });
+
+  // Load home by default
+  window.location.hash = "home";
+  showSection("home");
 
   // Sidebar navigations click listeners
+  const navH = document.getElementById("nav-home");
+  if (navH) {
+    navH.addEventListener("click", () => {
+      window.location.hash = "home";
+      showSection("home");
+    });
+  }
+
   document.getElementById("nav-leads").addEventListener("click", () => {
     window.location.hash = "leads";
     showSection("leads");
@@ -1423,20 +2047,30 @@ async function init() {
     showSection("batches");
   });
 
-  document.getElementById("nav-webintel").addEventListener("click", () => {
-    window.location.hash = "webintel";
-    showSection("webintel");
-  });
-
-  document.getElementById("nav-jobs").addEventListener("click", () => {
-    window.location.hash = "jobs";
-    showSection("jobs");
-  });
-
   document.getElementById("nav-settings").addEventListener("click", () => {
     window.location.hash = "settings";
     showSection("settings");
   });
+
+  // Home section metric cards click actions
+  const cardTotal = document.getElementById("card-total-leads");
+  if (cardTotal) cardTotal.onclick = () => { window.location.hash = "leads"; showSection("leads"); };
+
+  const cardPending = document.getElementById("card-pending-review");
+  if (cardPending) cardPending.onclick = () => { window.location.hash = "batches"; showSection("batches"); };
+
+  const cardActive = document.getElementById("card-active-sources");
+  if (cardActive) cardActive.onclick = () => { window.location.hash = "batches"; showSection("batches"); };
+
+  // Home section quick navigation cards click actions
+  const qnCapsules = document.getElementById("quick-nav-capsules");
+  if (qnCapsules) qnCapsules.onclick = () => { window.location.hash = "batches"; showSection("batches"); };
+
+  const qnLeads = document.getElementById("quick-nav-leads");
+  if (qnLeads) qnLeads.onclick = () => { window.location.hash = "leads"; showSection("leads"); };
+
+  const qnSettings = document.getElementById("quick-nav-settings");
+  if (qnSettings) qnSettings.onclick = () => { window.location.hash = "settings"; showSection("settings"); };
 
   // Programmatic event delegation for capsule card clicks on Capsules Grid list
   document.querySelectorAll(".capsule-card").forEach(card => {
@@ -1446,69 +2080,18 @@ async function init() {
     });
   });
 
-  // Detailed Workspace buttons bindings
+  // Detailed Workspace back button binding
   document.getElementById("btn-back-to-capsules").addEventListener("click", closeCapsuleWorkspace);
-  document.getElementById("act-open-leads").addEventListener("click", viewSourceLeads);
-  document.getElementById("act-resume-collect").addEventListener("click", resumeCapsuleCollection);
-  document.getElementById("act-refresh-stats").addEventListener("click", loadStats);
-  document.getElementById("act-export-source").addEventListener("click", exportCapsuleLeads);
-  document.getElementById("act-delete-capsule").addEventListener("click", deleteCapsuleAction);
 
-  // Tab switcher in Capsule Detail
-  const btnShowHistory = document.getElementById("btn-show-history");
-  const btnShowUrls = document.getElementById("btn-show-urls");
-  const btnShowReview = document.getElementById("btn-show-review");
-  const historyWrapper = document.getElementById("detail-history-wrapper");
-  const urlsWrapper = document.getElementById("detail-urls-wrapper");
-  const reviewWrapper = document.getElementById("detail-review-wrapper");
-
-  btnShowHistory.addEventListener("click", () => {
-    btnShowHistory.className = "btn btn-primary";
-    btnShowHistory.style.color = "#000";
-    btnShowUrls.className = "btn btn-ghost";
-    btnShowUrls.style.color = "";
-    btnShowReview.className = "btn btn-ghost";
-    btnShowReview.style.color = "";
-    historyWrapper.classList.remove("hidden");
-    urlsWrapper.classList.add("hidden");
-    reviewWrapper.classList.add("hidden");
+  // Search input live listener
+  let workspaceSearchTimer;
+  document.getElementById("workspace-search").addEventListener("input", (e) => {
+    clearTimeout(workspaceSearchTimer);
+    workspaceSearchTimer = setTimeout(() => {
+      workspaceSearchQuery = e.target.value.trim();
+      renderWorkspaceLeads();
+    }, 300);
   });
-
-  btnShowUrls.addEventListener("click", () => {
-    btnShowUrls.className = "btn btn-primary";
-    btnShowUrls.style.color = "#000";
-    btnShowHistory.className = "btn btn-ghost";
-    btnShowHistory.style.color = "";
-    btnShowReview.className = "btn btn-ghost";
-    btnShowReview.style.color = "";
-    urlsWrapper.classList.remove("hidden");
-    historyWrapper.classList.add("hidden");
-    reviewWrapper.classList.add("hidden");
-  });
-
-  btnShowReview.addEventListener("click", () => {
-    btnShowReview.className = "btn btn-primary";
-    btnShowReview.style.color = "#000";
-    btnShowHistory.className = "btn btn-ghost";
-    btnShowHistory.style.color = "";
-    btnShowUrls.className = "btn btn-ghost";
-    btnShowUrls.style.color = "";
-    reviewWrapper.classList.remove("hidden");
-    historyWrapper.classList.add("hidden");
-    urlsWrapper.classList.add("hidden");
-    loadReviewQueue();
-  });
-
-  // Review Queue bulk checkboxes
-  document.getElementById("review-select-all").addEventListener("change", (e) => {
-    const checked = e.target.checked;
-    const checkboxes = document.querySelectorAll("#detail-review-tbody .review-row-checkbox");
-    checkboxes.forEach(cb => cb.checked = checked);
-    updateReviewSelectedCount();
-  });
-
-  document.getElementById("btn-bulk-approve").addEventListener("click", approveSelectedLeadsAction);
-  document.getElementById("btn-bulk-reject").addEventListener("click", rejectSelectedLeadsAction);
 
   // Leads filters live listeners
   let searchTimer;
@@ -1533,6 +2116,12 @@ async function init() {
     loadLeads();
   });
 
+  document.getElementById("filter-mode").addEventListener("change", (e) => {
+    filters.mode = e.target.value;
+    currentPage = 1;
+    loadLeads();
+  });
+
   document.getElementById("filter-city").addEventListener("change", (e) => {
     filters.city = e.target.value;
     currentPage = 1;
@@ -1545,10 +2134,11 @@ async function init() {
   });
 
   document.getElementById("btn-clear-filters").addEventListener("click", () => {
-    filters = { search: "", source: "", status: "", city: "", sort: "date-desc" };
+    filters = { search: "", source: "", status: "", mode: "", city: "", sort: "date-desc" };
     document.getElementById("filter-search").value  = "";
     document.getElementById("filter-source").value  = "";
     document.getElementById("filter-status").value  = "";
+    document.getElementById("filter-mode").value    = "";
     document.getElementById("filter-city").value    = "";
     document.getElementById("filter-sort").value    = "date-desc";
     currentPage = 1;
@@ -1566,33 +2156,49 @@ async function init() {
   });
 
   document.getElementById("btn-next").addEventListener("click", () => {
-    const totalPages = Math.ceil(allLeads.length / PAGE_SIZE);
+    // Calculate total pages based on filtered counts
+    const filteredCount = allLeads.filter(lead => {
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        const nameMatch = (lead.business_name || "").toLowerCase().includes(q);
+        const phoneMatch = (lead.phone || "").toLowerCase().includes(q) || (lead.primary_phone || "").toLowerCase().includes(q);
+        const websiteMatch = (lead.website || "").toLowerCase().includes(q);
+        const cityMatch = (lead.city || "").toLowerCase().includes(q);
+        const categoryMatch = (lead.category || "").toLowerCase().includes(q);
+        if (!nameMatch && !phoneMatch && !websiteMatch && !cityMatch && !categoryMatch) return false;
+      }
+      if (filters.source && lead.source_site !== filters.source) return false;
+      if (filters.status && lead.lead_status !== filters.status) return false;
+      if (filters.mode && lead.collection_mode !== filters.mode) return false;
+      if (filters.city && lead.city !== filters.city) return false;
+      return true;
+    }).length;
+    const totalPages = Math.ceil(filteredCount / PAGE_SIZE);
     if (currentPage < totalPages) { currentPage++; renderLeadsPage(); }
   });
 
-  // Toolbar export select element listener
-  document.getElementById("toolbar-export-select").addEventListener("change", (e) => {
-    const format = e.target.value;
-    if (format) {
-      if (format === "sheets") {
-        alert("Linked Workspace Spreadsheet successfully!");
-      } else {
-        doExport(format);
-      }
-      e.target.value = ""; // Reset
-    }
+  // Bulk Workspace Actions
+  document.getElementById("btn-workspace-bulk-approve").addEventListener("click", bulkApproveWorkspaceLeads);
+  document.getElementById("btn-workspace-bulk-delete").addEventListener("click", bulkDeleteWorkspaceLeads);
+  document.getElementById("btn-workspace-clear-selection").addEventListener("click", () => {
+    selectedCapsuleLeads.clear();
+    const headerCheckbox = document.getElementById("workspace-select-all");
+    if (headerCheckbox) headerCheckbox.checked = false;
+    renderWorkspaceLeads();
   });
 
-  // Bulk action triggers listeners
-  document.getElementById("btn-bulk-delete").addEventListener("click", deleteSelectedLeads);
-  document.getElementById("btn-bulk-merge").addEventListener("click", mergeSelectedDuplicates);
-  document.getElementById("bulk-status").addEventListener("change", (e) => {
-    updateSelectedStatus(e.target.value);
-    e.target.value = ""; // Reset
+  // Bulk Main Leads Actions
+  document.getElementById("btn-leads-bulk-delete").addEventListener("click", bulkDeleteMainLeads);
+  document.getElementById("btn-leads-clear-selection").addEventListener("click", () => {
+    selectedMainLeads.clear();
+    const headerCheckbox = document.getElementById("leads-select-all");
+    if (headerCheckbox) headerCheckbox.checked = false;
+    renderLeadsPage();
   });
-
-  // Settings save click listener
+  // Settings listeners
   document.getElementById("btn-save-settings").addEventListener("click", saveSettings);
+  document.getElementById("btn-test-connection").addEventListener("click", testConnection);
+  document.getElementById("btn-refresh-db-info").addEventListener("click", refreshDiagnostics);
 
   // Modal overlay close clicks
   document.getElementById("modal-close").addEventListener("click", () => {
@@ -1604,25 +2210,15 @@ async function init() {
     }
   });
 
-  // Select all checkbox header click listener
-  document.getElementById("select-all").addEventListener("change", (e) => {
-    const checked = e.target.checked;
-    document.querySelectorAll(".lead-checkbox").forEach(cb => {
-      cb.checked = checked;
-      // Trigger change event to trigger updateBulkBarState
-      cb.dispatchEvent(new Event("change"));
-    });
-  });
-
-  // Background jobs refresh and website enrichment
-  document.getElementById("btn-refresh-jobs").addEventListener("click", loadJobs);
-  document.getElementById("btn-enrich-websites").addEventListener("click", runWebsiteEnrichment);
-
   // Real-time synchronization event listener from popup/tabs
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((message) => {
       if (message.type === "STATE_UPDATED") {
         loadStats();
+        // Refresh Capsule Workspace leads table if active
+        if (currentSelectedCapsule) {
+          loadWorkspaceLeads();
+        }
         // Only refresh Leads table if visible to avoid unnecessary re-renders
         if (!document.getElementById("leads-section").classList.contains("hidden")) {
           loadLeads();
@@ -1639,17 +2235,14 @@ async function init() {
   if (filterCapsule) {
     // Open detailed capsule directly on load
     openCapsuleWorkspace(filterCapsule);
-  } else if (["leads", "batches", "jobs", "webintel", "settings", "export"].includes(hash)) {
+  } else if (["home", "leads", "batches", "settings"].includes(hash)) {
     showSection(hash);
   } else {
-    showSection("leads");
+    showSection("home");
   }
 }
 
 // Expose functions needed by inline onclick handlers
-window.updateStatus    = updateStatus;
-window.deleteLead      = deleteLead;
 window.openLeadModal   = openLeadModal;
-window.controlJob      = controlJob;
 
 document.addEventListener("DOMContentLoaded", init);

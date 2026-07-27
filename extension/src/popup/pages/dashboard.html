@@ -154,23 +154,17 @@
     </div>
 
     <nav class="nav">
-      <a class="nav-link nav-item active" id="nav-leads">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor" opacity="0.7"/><rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor" opacity="0.5"/><rect x="1" y="11" width="10" height="2" rx="1" fill="currentColor" opacity="0.3"/></svg>
-        Dashboard
+      <a class="nav-link nav-item active" id="nav-home">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Home
       </a>
       <a class="nav-link nav-item" id="nav-batches">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5" opacity="0.7"/><path d="M5 8h6M5 11h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/></svg>
         Data Capsules
       </a>
-      <a class="nav-link nav-item" id="nav-webintel">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-        </svg>
-        Website Intelligence
-      </a>
-      <a class="nav-link nav-item" id="nav-jobs">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5" opacity="0.7"/><path d="M5 6h6M5 10h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/></svg>
-        Tasks
+      <a class="nav-link nav-item" id="nav-leads">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Main Leads
       </a>
       <a class="nav-link nav-item" id="nav-settings">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -178,10 +172,6 @@
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
         Settings
-      </a>
-      <a class="nav-link nav-item" id="nav-export" style="display: none;">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/><path d="M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/></svg>
-        Export
       </a>
     </nav>
 
@@ -197,33 +187,115 @@
     MAIN
   ================================================================ -->
   <main class="main">
-
-    <div class="topbar">
-      <div>
-        <h1 class="page-title" id="page-title">All Leads</h1>
-        <p class="page-sub" id="page-subtitle">Loading...</p>
-      </div>
-      <div class="topbar-actions">
-        <button class="btn btn-ghost" id="btn-enrich-websites" style="margin-right: 6px;">🌐 Enrich Websites</button>
-        <select class="f-select" id="toolbar-export-select" style="margin: 0; padding: 6px 12px; height: auto;">
-          <option value="">↓ Export Options</option>
-          <option value="xlsx">Excel XLSX</option>
-          <option value="csv">CSV File</option>
-          <option value="json">JSON Metadata</option>
-          <option value="sheets">Google Sheets</option>
-        </select>
+    <!-- Offline Overlay -->
+    <div id="offline-overlay" class="offline-overlay hidden">
+      <div class="offline-content">
+        <span class="offline-icon">🔴</span>
+        <h2>Engine Offline</h2>
+        <p>The ProspectLens background engine is not running.</p>
+        <p>Please open the extension popup and click <strong>"Start Engine"</strong> to continue.</p>
       </div>
     </div>
 
-    <!-- STAT CARDS -->
-    <div class="cards" id="stat-cards">
-      <div class="card"><div class="card-num" id="dash-total">—</div><div class="card-lbl">Total</div></div>
-      <div class="card"><div class="card-num" id="dash-new">—</div><div class="card-lbl">New</div></div>
-      <div class="card"><div class="card-num" id="dash-contacted">—</div><div class="card-lbl">Contacted</div></div>
-      <div class="card"><div class="card-num" id="dash-qualified">—</div><div class="card-lbl">Qualified</div></div>
-      <div class="card"><div class="card-num" id="dash-indiamart">—</div><div class="card-lbl">IndiaMART</div></div>
-      <div class="card"><div class="card-num" id="dash-googlemaps">—</div><div class="card-lbl">G Maps</div></div>
-      <div class="card"><div class="card-num" id="dash-justdial">—</div><div class="card-lbl">Justdial</div></div>
+    <div class="topbar">
+      <div>
+        <h1 class="page-title" id="page-title">Home Dashboard</h1>
+        <p class="page-sub" id="page-subtitle">Lead Intelligence Platform</p>
+      </div>
+    </div>
+
+    <!-- HOME SECTION -->
+    <div id="home-section" style="width: 100%;">
+      <h2 style="font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px;">Welcome to ProspectLens</h2>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5;">Your leads collection and management dashboard. Monitor collection metrics, review incoming capsules, and manage approved prospects.</p>
+
+      <!-- STAT CARDS (Inside Home) -->
+      <div class="cards" id="home-stat-cards" style="margin-bottom: 32px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
+        <div class="card" id="card-total-leads" style="cursor: pointer; margin: 0;">
+          <div class="card-num" id="dash-total">—</div>
+          <div class="card-lbl">Total Approved Leads</div>
+        </div>
+        <div class="card" id="card-pending-review" style="cursor: pointer; margin: 0;">
+          <div class="card-num" id="dash-pending-total">0</div>
+          <div class="card-lbl">Pending Review</div>
+        </div>
+        <div class="card" id="card-active-sources" style="cursor: pointer; margin: 0;">
+          <div class="card-num" id="dash-active-count">0</div>
+          <div class="card-lbl">Active Sources</div>
+        </div>
+      </div>
+
+      <!-- Quick Navigation Grid -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+        <div class="export-card" id="quick-nav-capsules" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
+          <div class="export-icon" style="font-size: 24px;">📦</div>
+          <div class="export-name" style="font-size: 13px; font-weight: 700;">Data Capsules Workspace</div>
+          <div class="export-desc" style="font-size: 11px;">Review incoming lead batches and approve/reject them.</div>
+        </div>
+        
+        <div class="export-card" id="quick-nav-leads" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
+          <div class="export-icon" style="font-size: 24px;">🗂️</div>
+          <div class="export-name" style="font-size: 13px; font-weight: 700;">Main Leads Database</div>
+          <div class="export-desc" style="font-size: 11px;">Search, filter, and inspect your approved leads database.</div>
+        </div>
+
+        <div class="export-card" id="quick-nav-settings" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
+          <div class="export-icon" style="font-size: 24px;">⚙️</div>
+          <div class="export-name" style="font-size: 13px; font-weight: 700;">Settings & API Keys</div>
+          <div class="export-desc" style="font-size: 11px;">Configure target queries, scrapers, and connections.</div>
+        </div>
+      </div>
+
+      <!-- COLLECTION JOBS TRACKER (Sprint 4.5) -->
+      <div style="margin-top: 32px; padding: 20px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px;">
+        <h3 style="font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 8px; margin-top: 0;">
+          <span style="color: var(--accent);">⚡</span> Collection Jobs Tracker
+        </h3>
+        
+        <!-- Active Job Card -->
+        <div id="active-job-container" style="margin-bottom: 20px; padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 6px; display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span id="active-job-title" style="font-weight: 700; font-size: 13px; color: var(--accent);">Active Job</span>
+            <span id="active-job-status" style="font-size: 11px; padding: 2px 6px; border-radius: 3px; background: var(--accent); color: #000; font-weight: bold; text-transform: uppercase;">RUNNING</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
+            <div>Keyword: <strong id="active-job-keyword" style="color: var(--text);">—</strong></div>
+            <div>Source: <strong id="active-job-source" style="color: var(--text);">—</strong></div>
+            <div>Progress: <strong id="active-job-progress-lbl" style="color: var(--text);">0%</strong></div>
+            <div>Current Listing: <strong id="active-job-listing" style="color: var(--text); font-style: italic;">—</strong></div>
+          </div>
+          <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
+            <div id="active-job-progress-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.3s ease;"></div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; font-size: 11px; text-align: center;">
+            <div style="background: rgba(255,255,255,0.05); padding: 4px; border-radius: 3px;">
+              <div style="color: var(--text-muted); font-size: 9px;">Seen</div>
+              <div id="active-job-seen" style="font-weight: bold; color: var(--text); font-size: 12px;">0</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.05); padding: 4px; border-radius: 3px;">
+              <div style="color: var(--text-muted); font-size: 9px;">Saved</div>
+              <div id="active-job-saved" style="font-weight: bold; color: #4ade80; font-size: 12px;">0</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.05); padding: 4px; border-radius: 3px;">
+              <div style="color: var(--text-muted); font-size: 9px;">Dupes</div>
+              <div id="active-job-dupes" style="font-weight: bold; color: #fbbf24; font-size: 12px;">0</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.05); padding: 4px; border-radius: 3px;">
+              <div style="color: var(--text-muted); font-size: 9px;">Errors</div>
+              <div id="active-job-errors" style="font-weight: bold; color: #f87171; font-size: 12px;">0</div>
+            </div>
+          </div>
+        </div>
+        <div id="no-active-job-placeholder" style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px; background: rgba(255,255,255,0.01); border: 1px dashed rgba(255,255,255,0.1); border-radius: 6px; margin-bottom: 20px;">
+          No active collection job running. Start a collection from the extension popup.
+        </div>
+
+        <!-- Recent Jobs List -->
+        <h4 style="font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">Recent Collection Jobs</h4>
+        <div id="recent-jobs-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto;">
+          <!-- Recent job rows will be rendered here -->
+        </div>
+      </div>
     </div>
 
     <!-- FILTERS -->
@@ -243,6 +315,11 @@
         <option value="qualified">Qualified</option>
         <option value="closed">Closed</option>
       </select>
+      <select class="f-select" id="filter-mode">
+        <option value="">All Modes</option>
+        <option value="quick">Quick Collect</option>
+        <option value="deep">Deep Collect</option>
+      </select>
       <select class="f-select" id="filter-city"><option value="">All Cities</option></select>
       <select class="f-select" id="filter-sort">
         <option value="date-desc">Newest First</option>
@@ -254,20 +331,33 @@
       <button class="btn btn-ghost" id="btn-refresh-leads">🔄</button>
     </div>
 
+    <!-- Main Leads Selection Bar -->
+    <div id="leads-bulk-bar" class="hidden" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #111; border: 1px solid #222; border-radius: 6px; font-size: 11px; margin-bottom: 12px;">
+      <div>
+        <span id="leads-selected-count" style="font-weight: bold; color: var(--accent);">0</span> leads selected
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-danger" id="btn-leads-bulk-delete" style="padding: 4px 8px; font-size: 10px; margin: 0; background: #ea4335; border: none; color: #fff; font-weight: bold;">Delete Selected</button>
+        <button class="btn btn-ghost" id="btn-leads-clear-selection" style="padding: 4px 8px; font-size: 10px; margin: 0;">Clear</button>
+      </div>
+    </div>
+
     <!-- LEADS TABLE -->
     <div class="tbl-wrap" id="leads-section">
       <table class="tbl">
         <thead>
           <tr>
-            <th><input type="checkbox" id="select-all" /></th>
-            <th>Business</th>
-            <th>Phone</th>
-            <th>Email</th>
-            <th>City</th>
-            <th>Source</th>
-            <th>Status</th>
-            <th>Date</th>
-            <th></th>
+            <th style="width: 30px; padding: 12px 16px;"><input type="checkbox" id="leads-select-all" /></th>
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Business Name</th>
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Category</th>
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Location</th>
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Phone</th>
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Website</th>
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Source</th>
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Collection Mode</th>
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Approved Date</th>
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Quality</th>
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Status</th>
           </tr>
         </thead>
         <tbody id="leads-tbody">
@@ -316,372 +406,242 @@
       </div>
 
       <!-- 2. CAPSULE DETAIL WORKSPACE VIEW -->
-      <div id="capsule-detail-view" class="hidden" style="width: 100%; display: flex; flex-direction: column; gap: 18px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #222; padding-bottom: 12px; margin-bottom: 6px;">
+      <div id="capsule-detail-view" class="hidden" style="width: 100%; display: flex; flex-direction: column; gap: 16px;">
+        <!-- Header / Navigation -->
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #222; padding-bottom: 12px;">
           <div style="display: flex; align-items: center; gap: 12px;">
-            <button class="btn btn-ghost" id="btn-back-to-capsules" style="padding: 6px 12px; margin: 0;">← Back</button>
-            <span id="detail-capsule-logo" style="font-size: 22px;">🗺️</span>
-            <h2 id="detail-capsule-name" style="font-size: 16px; font-weight: 700; color: var(--text); margin: 0;">Google Maps Capsule</h2>
-            <span id="detail-capsule-status-pill" class="source-badge source-googlemaps" style="padding: 2px 8px; font-size: 10px;">Active</span>
-          </div>
-          <div style="font-size: 11px; color: var(--text-muted);">
-            Last Sync: <span id="detail-last-updated">—</span>
+            <button class="btn btn-ghost" id="btn-back-to-capsules" style="padding: 6px 12px; margin: 0;">← Back to Capsules</button>
+            <h2 id="workspace-source-name" style="font-size: 18px; font-weight: 700; color: var(--text); margin: 0;">Google Maps Workspace</h2>
+            <span id="workspace-pending-count" class="source-badge" style="padding: 4px 10px; font-size: 11px; font-weight: bold; background: rgba(74, 222, 128, 0.15); color: #4ade80; border-radius: 4px;">0 Pending Leads</span>
           </div>
         </div>
 
-        <!-- QUICK ACTIONS BAR -->
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; background: #111; padding: 10px; border-radius: 6px; border: 1px solid #222;">
-          <button class="btn btn-primary" id="act-open-leads" style="color: #000; margin: 0;">Open Main Leads</button>
-          <button class="btn btn-ghost" id="act-resume-collect" style="margin: 0;">Resume Collection</button>
-          <button class="btn btn-ghost" id="act-refresh-stats" style="margin: 0;">Refresh Stats</button>
-          <button class="btn btn-ghost" id="act-export-source" style="margin: 0;">Export Leads</button>
-          <button class="btn btn-danger" id="act-delete-capsule" style="background:#ea4335; border:none; margin: 0; color:#fff;">Delete Capsule</button>
+        <!-- Search, Filter & Sort Bar -->
+        <div style="display: flex; gap: 12px; align-items: center; width: 100%;">
+          <input type="text" id="workspace-search" placeholder="Search by business name..." style="flex: 1; padding: 8px 12px; background: #111; border: 1px solid #222; color: #fff; border-radius: 4px; font-size: 12px;" />
+          <select disabled style="padding: 8px 12px; background: #111; border: 1px solid #222; color: #666; border-radius: 4px; font-size: 12px; cursor: not-allowed; margin: 0;">
+            <option>Filters (Placeholder)</option>
+          </select>
+          <select disabled style="padding: 8px 12px; background: #111; border: 1px solid #222; color: #666; border-radius: 4px; font-size: 12px; cursor: not-allowed; margin: 0;">
+            <option>Sort (Placeholder)</option>
+          </select>
         </div>
 
-        <!-- CAPSULE SPECIFIC STAT CARDS -->
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
-          <div class="export-card" style="padding: 12px; text-align: center;">
-            <div id="cap-stat-total" style="font-size: 22px; font-weight: 700; color: var(--text);">—</div>
-            <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase;">Total Leads</div>
+        <!-- Workspace Selection Bar -->
+        <div id="workspace-bulk-bar" class="hidden" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #111; border: 1px solid #222; border-radius: 6px; font-size: 11px;">
+          <div>
+            <span id="workspace-selected-count" style="font-weight: bold; color: var(--accent);">0</span> leads selected
           </div>
-          <div class="export-card" style="padding: 12px; text-align: center;">
-            <div id="cap-stat-active" style="font-size: 22px; font-weight: 700; color: var(--text);">—</div>
-            <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase;">Active Leads</div>
-          </div>
-          <div class="export-card" style="padding: 12px; text-align: center;">
-            <div id="cap-stat-deleted" style="font-size: 22px; font-weight: 700; color: var(--text);">—</div>
-            <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase;">Deleted Leads</div>
-          </div>
-          <div class="export-card" style="padding: 12px; text-align: center;">
-            <div id="cap-stat-duplicates" style="font-size: 22px; font-weight: 700; color: var(--text);">—</div>
-            <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase;">Duplicates</div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-primary" id="btn-workspace-bulk-approve" style="padding: 4px 8px; font-size: 10px; margin: 0; color: #000; font-weight: bold;">Approve Selected</button>
+            <button class="btn btn-danger" id="btn-workspace-bulk-delete" style="padding: 4px 8px; font-size: 10px; margin: 0; background: #ea4335; border: none; color: #fff; font-weight: bold;">Delete Selected</button>
+            <button class="btn btn-ghost" id="btn-workspace-clear-selection" style="padding: 4px 8px; font-size: 10px; margin: 0;">Clear</button>
           </div>
         </div>
 
-        <!-- DETAILED COLLECTION METRICS -->
-        <div class="export-card" style="padding: 16px;">
-          <h3 style="font-size: 12px; font-weight: 700; color: var(--text); margin: 0 0 12px 0; border-bottom: 1px solid #222; padding-bottom: 8px;">Collection Statistics</h3>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 11px;">
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Total Sessions:</span> <span id="cap-metric-sessions" style="font-weight: 600; color:var(--text);">0</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Total Pages Scanned:</span> <span id="cap-metric-pages" style="font-weight: 600; color:var(--text);">0</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Total Leads Collected:</span> <span id="cap-metric-collected" style="font-weight: 600; color:var(--text);">0</span></div>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">First Collection:</span> <span id="cap-metric-first" style="font-weight: 600; color:var(--text);">—</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Last Collection:</span> <span id="cap-metric-last" style="font-weight: 600; color:var(--text);">—</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Last Duration:</span> <span id="cap-metric-duration" style="font-weight: 600; color:var(--text);">—</span></div>
-            </div>
-          </div>
+        <!-- Workspace Main Table Section (with States) -->
+        <div class="tbl-wrap" style="border: 1px solid #222; border-radius: 6px; padding: 0; background: #0a0a0a;">
+          <table class="tbl" style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 1px solid #222; text-align: left;">
+                <th style="width: 30px; padding: 12px 16px;"><input type="checkbox" id="workspace-select-all" /></th>
+                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Business Name</th>
+                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Category</th>
+                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Location</th>
+                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Phone</th>
+                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Website</th>
+                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Collection Time</th>
+                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Quality</th>
+                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Status</th>
+              </tr>
+            </thead>
+            <tbody id="workspace-leads-tbody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
         </div>
-
-        <!-- BUSINESS PERFORMANCE METRICS -->
-        <div class="export-card" style="padding: 16px;">
-          <h3 style="font-size: 12px; font-weight: 700; color: var(--text); margin: 0 0 12px 0; border-bottom: 1px solid #222; padding-bottom: 8px;">Business Performance</h3>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 11px;">
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Total Leads Collected:</span> <span id="perf-total-leads" style="font-weight: 600; color:var(--text);">0</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Qualified Leads:</span> <span id="perf-qualified-leads" style="font-weight: 600; color:var(--text);">0</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Waste Leads:</span> <span id="perf-waste-leads" style="font-weight: 600; color:var(--text);">0</span></div>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Converted Clients:</span> <span id="perf-converted-clients" style="font-weight: 600; color:var(--text);">0</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Qualified Rate:</span> <span id="perf-qualified-rate" style="font-weight: 600; color:var(--text);">0.0%</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="color:var(--text-muted);">Client Conv. Rate:</span> <span id="perf-client-conv-rate" style="font-weight: 600; color:var(--text);">0.0%</span></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- COLLECTION TIMELINE (VISUAL METRIC) -->
-        <div class="export-card" id="timeline-card" style="padding: 16px;">
-          <h3 style="font-size: 12px; font-weight: 700; color: var(--text); margin: 0 0 16px 0; border-bottom: 1px solid #222; padding-bottom: 8px;">Collection Timeline</h3>
-          <div style="display: flex; align-items: center; justify-content: space-between; position: relative; padding: 10px 0; width: 100%;">
-            <!-- Horizontal line behind steps -->
-            <div style="position: absolute; top: 22px; left: 5%; right: 5%; height: 2px; background: #333; z-index: 1;"></div>
-            
-            <!-- Step 1: Visited -->
-            <div style="display: flex; flex-direction: column; align-items: center; z-index: 2; width: 14%;">
-              <div style="width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 2px solid #000;">✓</div>
-              <span style="font-size: 9px; color: var(--text); font-weight: 700; margin-top: 6px; text-align: center; white-space: nowrap;">Visited Site</span>
-              <span id="time-step-1" style="font-size: 8px; color: var(--text-muted); margin-top: 2px;">—</span>
-            </div>
-            
-            <!-- Step 2: Started -->
-            <div style="display: flex; flex-direction: column; align-items: center; z-index: 2; width: 14%;">
-              <div style="width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 2px solid #000;">✓</div>
-              <span style="font-size: 9px; color: var(--text); font-weight: 700; margin-top: 6px; text-align: center; white-space: nowrap;">Started Collect</span>
-              <span id="time-step-2" style="font-size: 8px; color: var(--text-muted); margin-top: 2px;">—</span>
-            </div>
-            
-            <!-- Step 3: Crawled -->
-            <div style="display: flex; flex-direction: column; align-items: center; z-index: 2; width: 14%;">
-              <div style="width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 2px solid #000;">✓</div>
-              <span style="font-size: 9px; color: var(--text); font-weight: 700; margin-top: 6px; text-align: center; white-space: nowrap;">Crawled</span>
-              <span id="time-step-3" style="font-size: 8px; color: var(--text-muted); margin-top: 2px;">—</span>
-            </div>
-            
-            <!-- Step 4: Extracted -->
-            <div style="display: flex; flex-direction: column; align-items: center; z-index: 2; width: 14%;">
-              <div style="width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 2px solid #000;">✓</div>
-              <span style="font-size: 9px; color: var(--text); font-weight: 700; margin-top: 6px; text-align: center; white-space: nowrap;">Extracted</span>
-              <span id="time-step-4" style="font-size: 8px; color: var(--text-muted); margin-top: 2px;">—</span>
-            </div>
-
-            <!-- Step 5: Duplicates -->
-            <div style="display: flex; flex-direction: column; align-items: center; z-index: 2; width: 14%;">
-              <div style="width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 2px solid #000;">✓</div>
-              <span style="font-size: 9px; color: var(--text); font-weight: 700; margin-top: 6px; text-align: center; white-space: nowrap;">Dupes Removed</span>
-              <span id="time-step-5" style="font-size: 8px; color: var(--text-muted); margin-top: 2px;">—</span>
-            </div>
-
-            <!-- Step 6: Saved -->
-            <div style="display: flex; flex-direction: column; align-items: center; z-index: 2; width: 14%;">
-              <div style="width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 2px solid #000;">✓</div>
-              <span style="font-size: 9px; color: var(--text); font-weight: 700; margin-top: 6px; text-align: center; white-space: nowrap;">Saved Main</span>
-              <span id="time-step-6" style="font-size: 8px; color: var(--text-muted); margin-top: 2px;">—</span>
-            </div>
-
-            <!-- Step 7: Completed -->
-            <div style="display: flex; flex-direction: column; align-items: center; z-index: 2; width: 14%;">
-              <div style="width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 2px solid #000;">✓</div>
-              <span style="font-size: 9px; color: var(--text); font-weight: 700; margin-top: 6px; text-align: center; white-space: nowrap;">Completed</span>
-              <span id="time-step-7" style="font-size: 8px; color: var(--text-muted); margin-top: 2px;">—</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- COLLECTION HISTORY & DIRECTORY URLS SWITCHER -->
-        <div style="margin-top: 8px;">
-          <div style="display: flex; gap: 8px; border-bottom: 1px solid #222; padding-bottom: 8px; margin-bottom: 12px;">
-            <button class="btn btn-primary" id="btn-show-history" style="padding: 4px 10px; font-size: 11px; margin: 0; color: #000;">Collection History</button>
-            <button class="btn btn-ghost" id="btn-show-urls" style="padding: 4px 10px; font-size: 11px; margin: 0;">Search Directory URLs</button>
-            <button class="btn btn-ghost" id="btn-show-review" style="padding: 4px 10px; font-size: 11px; margin: 0;">Review Queue</button>
-          </div>
-
-          <!-- SESSION HISTORY LIST -->
-          <div id="detail-history-wrapper" class="tbl-wrap" style="border: 1px solid #222; border-radius: 6px; padding: 0;">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Session ID</th>
-                  <th>Search Query</th>
-                  <th>Pages Crawled</th>
-                  <th>Leads Collected</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody id="detail-history-tbody">
-                <tr><td colspan="5" class="tbl-empty">No collection history available.</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- DIRECTORY URLS LIST -->
-          <div id="detail-urls-wrapper" class="tbl-wrap hidden" style="border: 1px solid #222; border-radius: 6px; padding: 0;">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Collection Date</th>
-                  <th>Search Query</th>
-                  <th>Original Directory Search URL</th>
-                  <th>Leads</th>
-                </tr>
-              </thead>
-              <tbody id="detail-urls-tbody">
-                <tr><td colspan="4" class="tbl-empty">No directory URLs saved.</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- REVIEW QUEUE LIST -->
-          <div id="detail-review-wrapper" class="tbl-wrap hidden" style="border: 1px solid #222; border-radius: 6px; padding: 0;">
-            <div id="review-bulk-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #111; border-bottom: 1px solid #222; font-size: 11px;">
-              <div>
-                <span id="review-selected-count">0</span> leads selected
-              </div>
-              <div style="display: flex; gap: 8px;">
-                <button class="btn btn-primary" id="btn-bulk-approve" style="padding: 4px 8px; font-size: 10px; margin: 0; color: #000;">Approve Selected</button>
-                <button class="btn btn-danger" id="btn-bulk-reject" style="padding: 4px 8px; font-size: 10px; margin: 0; background: #ea4335; border: none; color: #fff;">Reject Selected</button>
-              </div>
-            </div>
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th style="width: 30px;"><input type="checkbox" id="review-select-all" /></th>
-                  <th>Business Name</th>
-                  <th>Phone</th>
-                  <th>Email</th>
-                  <th>Category</th>
-                  <th>City</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="detail-review-tbody">
-                <tr><td colspan="7" class="tbl-empty">No leads pending review.</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-        </div>
-
       </div>
 
     </div>
 
-    <!-- JOBS TABLE (Active Background Tasks) -->
-    <div class="tbl-wrap hidden" id="jobs-section">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-        <h2 style="font-size: 13px; font-weight: 700; color: var(--text); margin: 0;">Active Background Scrapers & Enrichers</h2>
-        <button class="btn btn-ghost" id="btn-refresh-jobs" style="padding: 4px 8px; font-size: 11px; margin: 0;">🔄 Refresh</button>
-      </div>
-      <table class="tbl">
-        <thead>
-          <tr>
-            <th>Job ID</th>
-            <th>Task Type</th>
-            <th>Batch ID</th>
-            <th>Progress</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="jobs-tbody">
-          <tr><td colspan="6" class="tbl-empty">No active background tasks.</td></tr>
-        </tbody>
-      </table>
-    </div>
 
-    <!-- EXPORT PANEL -->
-    <div class="export-panel hidden" id="export-section">
-      <h2 class="export-h">Export Leads</h2>
-      <div class="export-cards">
-        <div class="export-card">
-          <div class="export-icon">📊</div>
-          <div class="export-name">Excel XLSX</div>
-          <div class="export-desc">Open in Microsoft Excel with formatted headers</div>
-          <button class="btn btn-primary export-btn" data-format="xlsx">Download XLSX</button>
-        </div>
-        <div class="export-card">
-          <div class="export-icon">📄</div>
-          <div class="export-name">CSV</div>
-          <div class="export-desc">Import into any CRM or spreadsheet tool</div>
-          <button class="btn btn-ghost export-btn" data-format="csv">Download CSV</button>
-        </div>
-      </div>
-      <div class="export-hist">
-        <p class="hist-title">Export History</p>
-        <div id="export-history-list">Loading...</div>
-      </div>
-    </div>
-
-    <!-- DATA CAPSULES GRID -->
-    <div class="tbl-wrap hidden" id="capsules-section">
-      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; width: 100%;">
-        <!-- Google Maps Capsule -->
-        <div class="export-card capsule-card" data-source="googlemaps" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
-          <div class="export-icon" style="font-size: 24px;">🗺️</div>
-          <div class="export-name" style="font-size: 13px; font-weight: 700; color: var(--text);">Google Maps</div>
-          <div class="export-desc" id="cap-googlemaps-details" style="font-size: 11px; color: var(--text-muted);">0 Leads • Waiting</div>
-        </div>
-        <!-- IndiaMART Capsule -->
-        <div class="export-card capsule-card" data-source="indiamart" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
-          <div class="export-icon" style="font-size: 24px;">🏭</div>
-          <div class="export-name" style="font-size: 13px; font-weight: 700; color: var(--text);">IndiaMART</div>
-          <div class="export-desc" id="cap-indiamart-details" style="font-size: 11px; color: var(--text-muted);">0 Leads • Waiting</div>
-        </div>
-        <!-- Justdial Capsule -->
-        <div class="export-card capsule-card" data-source="justdial" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
-          <div class="export-icon" style="font-size: 24px;">📞</div>
-          <div class="export-name" style="font-size: 13px; font-weight: 700; color: var(--text);">Justdial</div>
-          <div class="export-desc" id="cap-justdial-details" style="font-size: 11px; color: var(--text-muted);">0 Leads • Waiting</div>
-        </div>
-        <!-- TradeIndia Capsule -->
-        <div class="export-card capsule-card" data-source="tradeindia" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
-          <div class="export-icon" style="font-size: 24px;">📦</div>
-          <div class="export-name" style="font-size: 13px; font-weight: 700; color: var(--text);">TradeIndia</div>
-          <div class="export-desc" id="cap-tradeindia-details" style="font-size: 11px; color: var(--text-muted);">0 Leads • Waiting</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- WEBSITE INTELLIGENCE PANEL -->
-    <div class="tbl-wrap hidden" id="webintel-section">
-      <div style="display: flex; flex-direction: column; gap: 16px; width: 100%;">
-        <div class="export-card" style="display: flex; flex-direction: column; gap: 8px;">
-          <div class="export-icon" style="font-size: 24px;">🌐</div>
-          <div class="export-name" style="font-size: 13px; font-weight: 700; color: var(--text);">Design Craft Studio (https://designcraft.co.in)</div>
-          <div class="export-desc" style="font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-top: 6px;">
-            <strong style="color: var(--text);">Title:</strong> Modern Interior Designers & Architects | Design Craft Noida<br/>
-            <strong style="color: var(--text);">Description:</strong> Luxury residential and commercial design solutions across NCR.<br/>
-            <strong style="color: var(--text);">Contacts:</strong> info@designcraft.co.in, +91-98765-43210<br/>
-            <strong style="color: var(--text);">Technologies:</strong> WordPress, WooCommerce, Google Analytics, Cloudflare
-          </div>
-        </div>
-        <div class="export-card" style="display: flex; flex-direction: column; gap: 8px;">
-          <div class="export-icon" style="font-size: 24px;">🌐</div>
-          <div class="export-name" style="font-size: 13px; font-weight: 700; color: var(--text);">Boostlane Tech (https://boostlane.com)</div>
-          <div class="export-desc" style="font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-top: 6px;">
-            <strong style="color: var(--text);">Title:</strong> Boostlane | High Performance SaaS Marketing Platform<br/>
-            <strong style="color: var(--text);">Description:</strong> Automated SEO, growth pipelines, and technical branding projects.<br/>
-            <strong style="color: var(--text);">Contacts:</strong> contact@boostlane.com, +1-800-555-0199<br/>
-            <strong style="color: var(--text);">Technologies:</strong> Next.js, React, TailwindCSS, Stripe, Vercel
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- SETTINGS PANEL -->
-    <div class="tbl-wrap hidden" id="settings-section">
-      <div class="export-card" style="max-width: 500px; display: flex; flex-direction: column; gap: 14px; padding: 20px;">
-        <h2 style="font-size: 13px; font-weight: 700; color: var(--text); margin: 0 0 10px 0;">Scraper & GEMINI Configurations</h2>
+    <div class="hidden" id="settings-section">
+      <div style="display: flex; flex-direction: column; gap: 24px; max-width: 800px; margin: 0 auto; padding: 10px 0;">
         
-        <div style="display: flex; flex-direction: column; gap: 4px;">
-          <label style="font-size: 11px; color: var(--text); font-weight: 600;">API Base URL</label>
-          <input class="f-input" id="setting-api-url" type="text" style="width: 100%; box-sizing: border-box;" value="http://localhost:8000/api" />
-        </div>
-
-        <div style="display: flex; flex-direction: column; gap: 4px;">
-          <label style="font-size: 11px; color: var(--text); font-weight: 600;">Gemini API Key</label>
-          <input class="f-input" id="setting-gemini-key" type="password" style="width: 100%; box-sizing: border-box;" placeholder="Enter Gemini key..." />
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <label style="font-size: 11px; color: var(--text); font-weight: 600;">Scrape Delay (s)</label>
-            <input class="f-input" id="setting-scrape-delay" type="number" style="width: 100%; box-sizing: border-box;" value="3" />
+        <!-- General Section -->
+        <div class="settings-section" style="border: 1px solid #222; border-radius: 8px; background: #0a0a0a; padding: 16px;">
+          <h3 style="font-size: 14px; font-weight: 700; color: var(--text); margin: 0 0 12px 0; border-bottom: 1px solid #222; padding-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            ⚙️ General
+          </h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+            <div class="settings-card" style="background: #111; padding: 12px; border-radius: 6px; border: 1px solid #222;">
+              <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Application Name</div>
+              <div style="font-size: 13px; font-weight: 700; color: var(--text); margin-top: 4px;">ProspectLens</div>
+            </div>
+            <div class="settings-card" style="background: #111; padding: 12px; border-radius: 6px; border: 1px solid #222;">
+              <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Current & Extension Version</div>
+              <div style="font-size: 13px; font-weight: 700; color: var(--text); margin-top: 4px;">v1.2.0</div>
+            </div>
+            <div class="settings-card" style="background: #111; padding: 12px; border-radius: 6px; border: 1px solid #222;">
+              <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Database Connection</div>
+              <div style="margin-top: 6px;" id="settings-db-status-badge">
+                <span class="status-badge source-googlemaps">Checking...</span>
+              </div>
+            </div>
+            <div class="settings-card" style="background: #111; padding: 12px; border-radius: 6px; border: 1px solid #222;">
+              <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Backend Status</div>
+              <div style="margin-top: 6px;" id="settings-backend-status-badge">
+                <span class="status-badge source-googlemaps">Checking...</span>
+              </div>
+            </div>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <label style="font-size: 11px; color: var(--text); font-weight: 600;">Concurrency Limit</label>
-            <input class="f-input" id="setting-concurrency" type="number" style="width: 100%; box-sizing: border-box;" value="5" />
+        </div>
+
+        <!-- Connection Settings Section -->
+        <div class="settings-section" style="border: 1px solid #222; border-radius: 8px; background: #0a0a0a; padding: 16px;">
+          <h3 style="font-size: 14px; font-weight: 700; color: var(--text); margin: 0 0 12px 0; border-bottom: 1px solid #222; padding-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            🔌 Connection
+          </h3>
+          <div class="connection-card" style="display: flex; flex-direction: column; gap: 12px; background: #111; padding: 14px; border-radius: 6px; border: 1px solid #222;">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text); font-weight: 600;">Backend URL</label>
+              <input class="f-input" id="setting-api-url" type="text" style="width: 100%; box-sizing: border-box;" value="http://localhost:8000/api" />
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text); font-weight: 600;">Gemini API Key (Optional)</label>
+              <input class="f-input" id="setting-gemini-key" type="password" style="width: 100%; box-sizing: border-box;" placeholder="Enter Gemini key..." />
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 6px; font-size: 11px;">
+              <div>
+                <span style="color: var(--text-muted);">API version:</span> <strong id="settings-api-version">Unknown</strong>
+              </div>
+              <div>
+                <span style="color: var(--text-muted);">Last Sync:</span> <strong id="settings-last-sync">Never</strong>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px;">
+              <button class="btn btn-ghost" id="btn-test-connection" style="margin: 0; padding: 6px 12px;">Test Connection</button>
+              <button class="btn btn-primary" id="btn-save-settings" style="margin: 0; padding: 6px 12px;">Save Configurations</button>
+            </div>
           </div>
         </div>
 
-        <div style="display: flex; gap: 12px; margin-top: 6px;">
-          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text); cursor: pointer;">
-            <input type="checkbox" id="setting-headless" checked /> Headless Browser
-          </label>
-          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text); cursor: pointer;">
-            <input type="checkbox" id="setting-proxies" /> Rotate Proxies
-          </label>
+        <!-- Database Information Section -->
+        <div class="settings-section" style="border: 1px solid #222; border-radius: 8px; background: #0a0a0a; padding: 16px;">
+          <h3 style="font-size: 14px; font-weight: 700; color: var(--text); margin: 0 0 12px 0; border-bottom: 1px solid #222; padding-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            🗄️ Database
+          </h3>
+          <div class="database-card" style="background: #111; padding: 14px; border-radius: 6px; border: 1px solid #222; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
+              <div>
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">DB File Status</div>
+                <div style="font-size: 12px; font-weight: 700; margin-top: 2px;" id="settings-db-file-status">Checking...</div>
+              </div>
+              <div>
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Total Collected Leads</div>
+                <div style="font-size: 12px; font-weight: 700; margin-top: 2px;" id="settings-db-total-leads">0</div>
+              </div>
+              <div>
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Approved Leads</div>
+                <div style="font-size: 12px; font-weight: 700; margin-top: 2px;" id="settings-db-approved-leads">0</div>
+              </div>
+              <div>
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Pending Leads</div>
+                <div style="font-size: 12px; font-weight: 700; margin-top: 2px;" id="settings-db-pending-leads">0</div>
+              </div>
+              <div>
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Last Collection Batch</div>
+                <div style="font-size: 12px; font-weight: 700; margin-top: 2px;" id="settings-db-last-collect">Never</div>
+              </div>
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+              <button class="btn btn-ghost" id="btn-refresh-db-info" style="margin: 0; padding: 6px 12px;">Refresh Database Information</button>
+            </div>
+          </div>
         </div>
 
-        <button class="btn btn-primary" id="btn-save-settings" style="margin-top: 10px; width: fit-content; align-self: flex-end;">Save Configurations</button>
+        <!-- Collection Preferences Section -->
+        <div class="settings-section" style="border: 1px solid #222; border-radius: 8px; background: #0a0a0a; padding: 16px;">
+          <h3 style="font-size: 14px; font-weight: 700; color: var(--text); margin: 0 0 12px 0; border-bottom: 1px solid #222; padding-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            📥 Collection Preferences (Future Configs)
+          </h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #111; padding: 14px; border-radius: 6px; border: 1px solid #222;">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text); font-weight: 600;">Default Collection Mode</label>
+              <select class="f-select" id="setting-collection-mode" style="width: 100%;">
+                <option value="quick">Quick Collect Mode (Fast Metadata)</option>
+                <option value="deep">Deep Collect Mode (Deep Scraper)</option>
+              </select>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text); font-weight: 600;">Max Leads Per Session Limit</label>
+              <input class="f-input" id="setting-max-leads" type="number" style="width: 100%; box-sizing: border-box;" value="100" />
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px; grid-column: span 2; margin-top: 6px;">
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text); cursor: pointer;">
+                <input type="checkbox" id="setting-auto-refresh" checked /> Enable Real-time Auto-Refresh
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text); cursor: pointer; margin-top: 4px;">
+                <input type="checkbox" id="setting-future-enrichment" /> Auto-Enrich Newly Collected Websites
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Appearance Preferences Section -->
+        <div class="settings-section" style="border: 1px solid #222; border-radius: 8px; background: #0a0a0a; padding: 16px;">
+          <h3 style="font-size: 14px; font-weight: 700; color: var(--text); margin: 0 0 12px 0; border-bottom: 1px solid #222; padding-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            🎨 Appearance
+          </h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #111; padding: 14px; border-radius: 6px; border: 1px solid #222;">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text); font-weight: 600;">UI Accent Theme</label>
+              <select class="f-select" id="setting-appearance-theme" style="width: 100%;">
+                <option value="dark">Standard Sleek Dark Mode (Default)</option>
+                <option value="light">High Contrast Light Mode</option>
+                <option value="system">Follow Operating System default</option>
+              </select>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text); font-weight: 600;">Default View on Startup</label>
+              <select class="f-select" id="setting-default-dashboard" style="width: 100%;">
+                <option value="home">Home Dashboard Overview</option>
+                <option value="leads">All Approved Leads Database</option>
+                <option value="batches">Data Capsules review workspace</option>
+              </select>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px; grid-column: span 2; margin-top: 6px;">
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text); cursor: pointer;">
+                <input type="checkbox" id="setting-compact-table" /> Use Compact Lead Rows Layout
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text); cursor: pointer; margin-top: 4px;">
+                <input type="checkbox" id="setting-large-rows" /> Display Large Text in details panel
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- About Section -->
+        <div class="settings-section" style="border: 1px solid #222; border-radius: 8px; background: #0a0a0a; padding: 16px;">
+          <h3 style="font-size: 14px; font-weight: 700; color: var(--text); margin: 0 0 12px 0; border-bottom: 1px solid #222; padding-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            ℹ️ About ProspectLens
+          </h3>
+          <div style="background: #111; padding: 14px; border-radius: 6px; border: 1px solid #222; font-size: 11px; line-height: 1.6; color: var(--text-muted);">
+            <strong style="color: var(--text); font-size: 13px;">ProspectLens Client App</strong><br/>
+            <span>Version: <strong>1.2.0</strong></span><br/>
+            <span>Developer: <strong>ProspectLens Open Source Core Team</strong></span><br/>
+            <span>Description: <strong>Lead Intelligence, B2B profiling, and automatic quality completeness calculation system for high-performing sales pipelines.</strong></span><br/>
+            <span>Build Date: <strong>July 2026</strong></span>
+          </div>
+        </div>
+
       </div>
-    </div>
-
-    <!-- BULK ACTIONS FLOATING PANEL -->
-    <div id="bulk-action-bar" style="position: fixed; bottom: -80px; left: 50%; transform: translateX(-50%); background: #111; border: 1px solid #333; border-radius: 6px; padding: 10px 20px; display: flex; align-items: center; gap: 12px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.5); transition: bottom 0.22s cubic-bezier(0.16, 1, 0.3, 1);">
-      <span style="color: #fff; font-size: 11px;" id="bulk-selected-count">0 selected</span>
-      <span id="bulk-dup-tag" style="background: var(--accent); color: #000; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; display: none;">Duplicates Detected</span>
-      <select class="f-select" id="bulk-status" style="margin: 0; padding: 4px 8px;">
-        <option value="">Change Status...</option>
-        <option value="new">New</option>
-        <option value="contacted">Contacted</option>
-        <option value="qualified">Qualified</option>
-        <option value="closed">Closed</option>
-      </select>
-      <button class="btn btn-ghost" id="btn-bulk-merge" style="margin: 0; padding: 6px 12px;">Merge Selected</button>
-      <button class="btn btn-danger" id="btn-bulk-delete" style="margin: 0; padding: 6px 12px; background: #ea4335; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Delete Selected</button>
     </div>
 
   </main>

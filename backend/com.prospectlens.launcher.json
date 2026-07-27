@@ -1,0 +1,9 @@
+{
+  "name": "com.prospectlens.launcher",
+  "description": "ProspectLens Backend Launcher Host",
+  "path": "C:\\Users\\devas\\Desktop\\ProspectLens\\backend\\launcher_host.bat",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://foifgnnpaiflbngeinfjebgflnmhaibe/"
+  ]
+}

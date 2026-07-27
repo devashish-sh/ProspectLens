@@ -59,6 +59,25 @@ class Lead(SQLModel, table=True):
     created_at:       datetime = Field(default_factory=datetime.utcnow)
     updated_at:       datetime = Field(default_factory=datetime.utcnow)
     
+    # New fields for Sprint 4.3 Quick Collect Expansion
+    search_keyword:   Optional[str] = Field(default=None)
+    search_location:  Optional[str] = Field(default=None)
+    collection_date:  Optional[str] = Field(default=None)
+    collection_time:  Optional[str] = Field(default=None)
+    website_domain:   Optional[str] = Field(default=None)
+    open_status:      Optional[str] = Field(default=None)
+    displayed_price:  Optional[str] = Field(default=None)
+    price_currency:   Optional[str] = Field(default=None)
+    price_type:       Optional[str] = Field(default=None)
+    price_level:      Optional[str] = Field(default=None)
+    flexible_metadata: Optional[str] = Field(default=None)
+
+    # Sprint 4.4 Universal Schema additions
+    sub_category:     Optional[str] = Field(default=None)
+    source_business_id: Optional[str] = Field(default=None)
+    collector_version: Optional[str] = Field(default="1.0.0")
+    secondary_phones:  Optional[str] = Field(default=None)
+
     # Reserved Fields
     reserved_field_1: Optional[str] = Field(default=None)
     reserved_field_2: Optional[str] = Field(default=None)
@@ -155,6 +174,37 @@ class Job(SQLModel, table=True):
     records_total:       int      = Field(default=0)
     gemini_profile_id:   Optional[str] = Field(default=None)        # ID of Gemini behavior profile used
     queue_state:         Optional[str] = Field(default=None)        # JSON string — saved queue for resume
+    created_at:          datetime = Field(default_factory=datetime.utcnow)
+    updated_at:          datetime = Field(default_factory=datetime.utcnow)
+
+
+# ==============================================================================
+# TABLE 4.5 — Collection Jobs (Sprint 4.5)
+# Tracks Quick Collect & Deep Collect managed scraper lifecycles.
+# ==============================================================================
+
+class CollectionJob(SQLModel, table=True):
+    __tablename__ = "collection_jobs"
+
+    job_id:              str      = Field(primary_key=True)
+    status:              str      = Field(default="queued", index=True)  # queued / starting / running / paused / completed / failed / cancelled
+    source:              str      = Field(default="")                   # googlemaps / indiamart / justdial
+    mode:                str      = Field(default="quick")              # quick / deep
+    search_keyword:      Optional[str] = Field(default=None)
+    search_query:        Optional[str] = Field(default=None)
+    search_location:     Optional[str] = Field(default=None)
+    search_url:          Optional[str] = Field(default=None)
+    start_time:          Optional[datetime] = Field(default=None)
+    end_time:            Optional[datetime] = Field(default=None)
+    duration:            Optional[float] = Field(default=None)         # duration in seconds
+    saved:               int      = Field(default=0)
+    duplicates:          int      = Field(default=0)
+    errors:              int      = Field(default=0)
+    skipped:             int      = Field(default=0)
+    total_seen:          int      = Field(default=0)
+    current_listing:     Optional[str] = Field(default=None)
+    progress_percentage: float    = Field(default=0.0)
+    metadata_json:       Optional[str] = Field(default=None)        # holds JSON options / retry state
     created_at:          datetime = Field(default_factory=datetime.utcnow)
     updated_at:          datetime = Field(default_factory=datetime.utcnow)
 

@@ -103,6 +103,28 @@ def _build_export_rows(leads: list, session: Session) -> list[dict]:
             "Notes":           lead.notes           or "",
             "Tags":            lead.tags            or "",
             "Collected At":    lead.collected_at.strftime("%Y-%m-%d %H:%M") if lead.collected_at else "",
+            
+            # New fields for Sprint 4.3
+            "Search Keyword":  lead.search_keyword  or "",
+            "Search Location": lead.search_location or "",
+            "Search Query":    lead.search_query    or "",
+            "Search URL":      lead.directory_search_url or "",
+            "Collection Date": lead.collection_date or "",
+            "Collection Time": lead.collection_time or "",
+            "Rating":          lead.rating          if lead.rating is not None else "",
+            "Review Count":    lead.review_count    if lead.review_count is not None else "",
+            "Open Status":     lead.open_status     or "",
+            "Price Level":     lead.price_level     or "",
+            "Displayed Price": lead.displayed_price or "",
+            "Price Type":      lead.price_type      or "",
+            "Website Domain":  lead.website_domain  or "",
+            "Flexible Metadata": lead.flexible_metadata or "",
+            
+            # Sprint 4.4 Universal Schema additions
+            "Sub Category":    lead.sub_category    or "",
+            "Source Business ID": lead.source_business_id or "",
+            "Collector Version": lead.collector_version or "1.0.0",
+            "Secondary Phones": lead.secondary_phones or "",
         })
     return rows
 
