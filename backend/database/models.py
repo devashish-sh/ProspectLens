@@ -210,6 +210,28 @@ class CollectionJob(SQLModel, table=True):
 
 
 # ==============================================================================
+# TABLE 4.6 — Deep Queue Items (Sprint 5)
+# Tracks sequential listing enrichment queues in Deep Collect.
+# ==============================================================================
+
+class DeepQueueItem(SQLModel, table=True):
+    __tablename__ = "deep_queue_items"
+
+    queue_item_id:   str      = Field(default_factory=generate_uuid, primary_key=True)
+    lead_id:         str      = Field(index=True)
+    job_id:          str      = Field(index=True)
+    business_name:   str      = Field(default="")
+    listing_url:     str      = Field(default="")
+    queue_position:  int      = Field(default=0)
+    status:          str      = Field(default="pending", index=True) # pending / running / completed / failed / skipped / retrying
+    retry_count:     int      = Field(default=0)
+    started_at:      Optional[datetime] = Field(default=None)
+    completed_at:    Optional[datetime] = Field(default=None)
+    created_at:      datetime = Field(default_factory=datetime.utcnow)
+    updated_at:      datetime = Field(default_factory=datetime.utcnow)
+
+
+# ==============================================================================
 # TABLE 5 — Export History  (Phase 1 Active)
 # Every export generated is logged here — file path, format, record count.
 # ==============================================================================

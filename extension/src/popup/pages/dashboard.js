@@ -231,6 +231,42 @@ async function loadCollectionJobs() {
       
       const errorsEl = document.getElementById("active-job-errors");
       if (errorsEl) errorsEl.textContent = job.errors || 0;
+
+      // Handle Deep Collect Stage Info (Sprint 5)
+      const deepDetails = document.getElementById("active-job-deep-details");
+      if (deepDetails) {
+        if (job.mode === "deep") {
+          deepDetails.style.display = "grid";
+          
+          let meta = {};
+          if (job.metadata_json) {
+            try {
+              meta = JSON.parse(job.metadata_json);
+            } catch {}
+          }
+          
+          const stageEl = document.getElementById("active-job-stage");
+          if (stageEl) stageEl.textContent = meta.stage || "Stage 1: Snapshot Collection";
+          
+          const compEl = document.getElementById("active-job-completed-q");
+          if (compEl) compEl.textContent = meta.completed || 0;
+          
+          const failEl = document.getElementById("active-job-failed-q");
+          if (failEl) failEl.textContent = meta.failed || 0;
+          
+          const remainEl = document.getElementById("active-job-remaining-q");
+          if (remainEl) {
+            const total = meta.total_items || 0;
+            const current = meta.current_index || 0;
+            remainEl.textContent = `${Math.max(0, total - current)} remaining`;
+          }
+          
+          const retryEl = document.getElementById("active-job-retries-q");
+          if (retryEl) retryEl.textContent = meta.retries || 0;
+        } else {
+          deepDetails.style.display = "none";
+        }
+      }
     } else {
       if (activeJobContainer) activeJobContainer.style.display = "none";
       if (noActiveJobPlaceholder) noActiveJobPlaceholder.style.display = "block";
@@ -1886,7 +1922,7 @@ function showSection(sectionId) {
   }
 
   // Hide all panels
-  const sections = ["home-section", "leads-section", "batches-section", "settings-section"];
+  const sections = ["home-section", "leads-section", "batches-section", "settings-section", "dev-validation-section"];
   sections.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.add("hidden");
@@ -1927,6 +1963,24 @@ function showSection(sectionId) {
     document.getElementById("nav-settings").classList.add("active");
     document.getElementById("page-title").textContent = "Configuration Settings";
     loadSettings();
+  } else if (sectionId === "dev-validation") {
+    const devSec = document.getElementById("dev-validation-section");
+    if (devSec) devSec.classList.remove("hidden");
+    const devNav = document.getElementById("nav-dev-validation");
+    if (devNav) devNav.classList.add("active");
+    document.getElementById("page-title").textContent = "Developer Diagnostics & Validation";
+    
+    // Read batch_id from URL query if present, otherwise default
+    const urlParams = new URLSearchParams(window.location.search);
+    const batchId = urlParams.get("batch_id");
+    
+    populateValidationBatchSelect().then(() => {
+      if (batchId) {
+        const select = document.getElementById("validation-batch-select");
+        if (select) select.value = batchId;
+      }
+      loadValidationMetrics(batchId || document.getElementById("validation-batch-select")?.value);
+    });
   }
 }
 
@@ -2005,12 +2059,183 @@ function formatDate(dateStr) {
   }
 }
 
+function syncDeveloperModeUI() {
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get("developerMode").then((data) => {
+      const isDev = !!data.developerMode;
+      const devNav = document.getElementById("nav-dev-validation");
+      if (devNav) {
+        if (isDev) {
+          devNav.classList.remove("hidden");
+        } else {
+          devNav.classList.add("hidden");
+          if (window.location.hash === "#dev-validation") {
+            window.location.hash = "home";
+            showSection("home");
+          }
+        }
+      }
+      const devCheckbox = document.getElementById("settings-dev-mode");
+      if (devCheckbox) {
+        devCheckbox.checked = isDev;
+      }
+    });
+  }
+}
+
+async function populateValidationBatchSelect() {
+  const select = document.getElementById("validation-batch-select");
+  if (!select) return;
+  try {
+    const recentRes = await fetch(`${API_BASE}/collection-jobs/recent`);
+    const recentData = await recentRes.json();
+    const jobs = recentData.jobs || [];
+    select.innerHTML = "";
+    if (jobs.length === 0) {
+      select.innerHTML = `<option value="">No jobs found</option>`;
+      return;
+    }
+    jobs.forEach(job => {
+      const timeStr = formatDate(job.created_at);
+      select.innerHTML += `<option value="${job.job_id}">${job.job_id} (${sourceLabel(job.source)} - ${timeStr})</option>`;
+    });
+    
+    select.onchange = () => {
+      loadValidationMetrics(select.value);
+    };
+  } catch (err) {
+    console.error("Failed to populate validation batch select:", err);
+  }
+}
+
+async function loadValidationMetrics(jobId) {
+  if (!jobId) {
+    const select = document.getElementById("validation-batch-select");
+    if (select && select.value) {
+      jobId = select.value;
+    }
+  }
+  
+  if (!jobId) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/collection-jobs/${jobId}/validation`);
+    const data = await res.json();
+    if (data.status !== "ok" || !data.validation) return;
+    
+    const val = data.validation;
+    
+    // Populate simple metrics
+    document.getElementById("val-mode").textContent = (val.mode || "quick").toUpperCase();
+    document.getElementById("val-runtime").textContent = `${(val.runtime || 0).toFixed(1)}s`;
+    document.getElementById("val-success-rate").textContent = `${(val.queue_success_rate || 0).toFixed(1)}%`;
+    document.getElementById("val-completeness").textContent = `${(val.average_completeness_score || 0).toFixed(1)}%`;
+    document.getElementById("val-retry-count").textContent = val.performance.retry_count || 0;
+
+    // Populate timings
+    document.getElementById("val-time-snapshot").textContent = `${(val.timings.snapshot_time || 0).toFixed(1)}s`;
+    document.getElementById("val-time-queue").textContent = `${(val.timings.queue_time || 0).toFixed(1)}s`;
+    document.getElementById("val-time-deep").textContent = `${(val.timings.deep_extraction_time || 0).toFixed(1)}s`;
+    document.getElementById("val-time-merge").textContent = `${(val.timings.merge_time || 0).toFixed(1)}s`;
+    document.getElementById("val-time-avg-lead").textContent = `${(val.timings.avg_extraction_time_per_lead || 0).toFixed(1)}s`;
+
+    // Populate queue statistics
+    document.getElementById("val-q-completed").textContent = val.performance.queue_stats.completed || 0;
+    document.getElementById("val-q-failed").textContent = val.performance.queue_stats.failed || 0;
+    document.getElementById("val-q-pending").textContent = val.performance.queue_stats.pending || 0;
+
+    // Populate Matrix Table
+    const matrixBody = document.getElementById("val-matrix-tbody");
+    matrixBody.innerHTML = "";
+    if (val.field_completeness_matrix) {
+      Object.keys(val.field_completeness_matrix).sort().forEach(field => {
+        const pct = val.field_completeness_matrix[field] || 0;
+        const color = pct > 80 ? "var(--accent)" : (pct > 50 ? "#f59e0b" : "#ea4335");
+        matrixBody.innerHTML += `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+            <td style="padding: 6px; font-weight: 500; color: #fff;">${field}</td>
+            <td style="padding: 6px; text-align: right; color: ${color}; font-weight: 700;">${pct}%</td>
+          </tr>
+        `;
+      });
+    }
+
+    // Populate Missing Report
+    const missingDiv = document.getElementById("val-missing-report");
+    missingDiv.innerHTML = "";
+    if (!val.missing_fields_report || val.missing_fields_report.length === 0) {
+      missingDiv.innerHTML = `<div style="color: var(--accent); font-weight: bold; text-align: center; margin-top: 20px;">✓ 100% Complete! No missing fields.</div>`;
+    } else {
+      val.missing_fields_report.forEach(item => {
+        missingDiv.innerHTML += `
+          <div style="background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 4px; padding: 6px; display: flex; justify-content: space-between;">
+            <span style="font-weight: 500; color: #fff;">${item.field}</span>
+            <span style="color: #ea4335;">Missing: ${item.missing_count} (${item.missing_percentage}%)</span>
+          </div>
+        `;
+      });
+    }
+
+    // Populate Error Logs Table
+    document.getElementById("val-error-count").textContent = `${(val.error_logs || []).length} errors logged`;
+    const errorsBody = document.getElementById("val-errors-tbody");
+    errorsBody.innerHTML = "";
+    if (!val.error_logs || val.error_logs.length === 0) {
+      errorsBody.innerHTML = `
+        <tr>
+          <td colspan="5" style="padding: 12px; text-align: center; color: var(--text-muted);">No errors logged for this run.</td>
+        </tr>
+      `;
+    } else {
+      val.error_logs.forEach(err => {
+        errorsBody.innerHTML += `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+            <td style="padding: 6px; color: #fff; font-weight: bold;">${escHtml(err.collection_stage)}</td>
+            <td style="padding: 6px; color: #f59e0b;">${escHtml(err.error_category)}</td>
+            <td style="padding: 6px;">${escHtml(err.error_message)}</td>
+            <td style="padding: 6px; color: var(--text-muted); font-family: monospace;">${escHtml(err.technical_details || "—")}</td>
+            <td style="padding: 6px;"><a href="${err.listing_url || '#'}" target="_blank" style="color: var(--accent); text-decoration: none;">Link</a></td>
+          </tr>
+        `;
+      });
+    }
+
+  } catch (err) {
+    console.error("Failed to load validation metrics:", err);
+  }
+}
+
 // ============================================================
 // INITIALIZATION
 // ============================================================
 async function init() {
   await checkBackend();
   await loadStats();
+
+  // Sync Developer Mode UI on load
+  syncDeveloperModeUI();
+
+  // Listen to local storage changes to keep Developer Mode synchronized
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes.developerMode) {
+        syncDeveloperModeUI();
+      }
+    });
+  }
+
+  // Developer Mode checkbox change listener
+  const devCheckbox = document.getElementById("settings-dev-mode");
+  if (devCheckbox) {
+    devCheckbox.addEventListener("change", () => {
+      chrome.storage.local.set({ developerMode: devCheckbox.checked }).then(() => {
+        syncDeveloperModeUI();
+        if (chrome.runtime && chrome.runtime.sendMessage) {
+          chrome.runtime.sendMessage({ type: "STATE_UPDATED" });
+        }
+      });
+    });
+  }
 
   // Listen for background engine state changes to react dynamically
   chrome.storage.onChanged.addListener(async (changes) => {
@@ -2051,6 +2276,14 @@ async function init() {
     window.location.hash = "settings";
     showSection("settings");
   });
+
+  const devNav = document.getElementById("nav-dev-validation");
+  if (devNav) {
+    devNav.addEventListener("click", () => {
+      window.location.hash = "dev-validation";
+      showSection("dev-validation");
+    });
+  }
 
   // Home section metric cards click actions
   const cardTotal = document.getElementById("card-total-leads");
@@ -2235,7 +2468,7 @@ async function init() {
   if (filterCapsule) {
     // Open detailed capsule directly on load
     openCapsuleWorkspace(filterCapsule);
-  } else if (["home", "leads", "batches", "settings"].includes(hash)) {
+  } else if (["home", "leads", "batches", "settings", "dev-validation"].includes(hash)) {
     showSection(hash);
   } else {
     showSection("home");

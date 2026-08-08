@@ -265,26 +265,29 @@
         <span class="collect-btn-text">Start Collection</span>
       </button>
 
-      <div id="collection-controls" class="collection-controls hidden">
-        <button class="btn-control btn-pause" id="btn-pause-collection">Pause</button>
-        <button class="btn-control btn-resume hidden" id="btn-resume-collection">Resume</button>
-        <button class="btn-control btn-stop" id="btn-stop-collection">Stop</button>
-      </div>
-
-      <div class="progress-wrap hidden" id="progress-container" style="margin-top: 10px;">
-        <div class="progress-track">
-          <div class="progress-fill" id="progress-fill"></div>
+      <!-- Runtime Container (Sprint 5 RC2) -->
+      <div id="runtime-container" class="hidden">
+        <div id="collection-controls" class="collection-controls">
+          <button class="btn-control btn-pause" id="btn-pause-collection">Pause</button>
+          <button class="btn-control btn-resume hidden" id="btn-resume-collection">Resume</button>
+          <button class="btn-control btn-stop" id="btn-stop-collection">Stop</button>
         </div>
-        <div class="progress-text" id="progress-text">Starting...</div>
-      </div>
 
-      <div id="rich-progress" class="rich-progress hidden" style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 6px; padding: 8px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);">
-        <div style="color: var(--text-dark);">Collected: <strong id="prog-collected" style="color:#fff;">0</strong></div>
-        <div style="color: var(--text-dark);">Saved: <strong id="prog-saved" style="color:var(--accent);">0</strong></div>
-        <div style="color: var(--text-dark);">Duplicates: <strong id="prog-duplicates" style="color:#f59e0b;">0</strong></div>
-        <div style="color: var(--text-dark);">Failed: <strong id="prog-failed" style="color:#ea4335;">0</strong></div>
-        <div style="grid-column: span 2; border-top: 1px solid var(--border); padding-top: 4px; margin-top: 2px; color: var(--text-dark);">
-          Status: <span id="prog-status" style="color:#fff; font-weight: bold;">Waiting...</span>
+        <div class="progress-wrap" id="progress-container" style="margin-top: 10px;">
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <div class="progress-text" id="progress-text">Starting...</div>
+        </div>
+
+        <div id="rich-progress" class="rich-progress" style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 6px; padding: 8px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);">
+          <div style="color: var(--text-dark);">Collected: <strong id="prog-collected" style="color:#fff;">0</strong></div>
+          <div style="color: var(--text-dark);">Saved: <strong id="prog-saved" style="color:var(--accent);">0</strong></div>
+          <div style="color: var(--text-dark);">Duplicates: <strong id="prog-duplicates" style="color:#f59e0b;">0</strong></div>
+          <div style="color: var(--text-dark);">Failed: <strong id="prog-failed" style="color:#ea4335;">0</strong></div>
+          <div style="grid-column: span 2; border-top: 1px solid var(--border); padding-top: 4px; margin-top: 2px; color: var(--text-dark);">
+            Status: <span id="prog-status" style="color:#fff; font-weight: bold;">Waiting...</span>
+          </div>
         </div>
       </div>
     </div>
@@ -369,6 +372,10 @@
         <div class="settings-row">
           <span>Last Sync Time:</span>
           <span id="sett-last-sync" style="color:#fff; font-weight:700;">—</span>
+        </div>
+        <div class="settings-row" style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px;">
+          <span>Developer Mode:</span>
+          <input type="checkbox" id="sett-dev-mode" style="accent-color: var(--accent); cursor: pointer;" />
         </div>
         
         <div style="display: flex; gap: 6px; margin-top: 4px;">

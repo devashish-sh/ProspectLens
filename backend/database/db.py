@@ -46,7 +46,7 @@ def create_db_and_tables():
 
     # Import all models here so SQLModel knows about them before creating tables
     from database.models import (
-        Lead, Contact, CollectionBatch, Job, CollectionJob,
+        Lead, Contact, CollectionBatch, Job, CollectionJob, DeepQueueItem,
         ExportHistory, VisitedURL, SourceRecord,
         Note, User, Tag, LeadTag,
         WebsiteSource, DataCapsule, SearchHistory, LeadHistory,

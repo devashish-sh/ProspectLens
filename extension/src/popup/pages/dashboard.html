@@ -173,6 +173,14 @@
         </svg>
         Settings
       </a>
+      <a class="nav-link nav-item hidden" id="nav-dev-validation">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        Dev Validation
+      </a>
     </nav>
 
     <div class="sidebar-foot">
@@ -284,6 +292,14 @@
               <div style="color: var(--text-muted); font-size: 9px;">Errors</div>
               <div id="active-job-errors" style="font-weight: bold; color: #f87171; font-size: 12px;">0</div>
             </div>
+          </div>
+          <!-- Deep Collect stage details (Sprint 5) -->
+          <div id="active-job-deep-details" style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); display: none; font-size: 11px; color: var(--text-muted); grid-template-columns: 1fr 1fr; gap: 6px; text-align: left;">
+            <div>Stage: <strong id="active-job-stage" style="color: var(--text);">—</strong></div>
+            <div>Completed Queue: <strong id="active-job-completed-q" style="color: #4ade80;">0</strong></div>
+            <div>Failed Queue: <strong id="active-job-failed-q" style="color: #f87171;">0</strong></div>
+            <div>Remaining Queue: <strong id="active-job-remaining-q" style="color: var(--text);">0</strong></div>
+            <div>Retries: <strong id="active-job-retries-q" style="color: #fbbf24;">0</strong></div>
           </div>
         </div>
         <div id="no-active-job-placeholder" style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px; background: rgba(255,255,255,0.01); border: 1px dashed rgba(255,255,255,0.1); border-radius: 6px; margin-bottom: 20px;">
@@ -496,6 +512,13 @@
                 <span class="status-badge source-googlemaps">Checking...</span>
               </div>
             </div>
+            <div class="settings-card" style="background: #111; padding: 12px; border-radius: 6px; border: 1px solid #222;">
+              <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Developer Mode</div>
+              <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="settings-dev-mode" style="accent-color: var(--accent); cursor: pointer;" />
+                <span style="font-size: 11px; color: var(--text);">Enable Debug Dashboard</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -641,6 +664,157 @@
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- DEVELOPER VALIDATION DASHBOARD -->
+    <div class="hidden" id="dev-validation-section" style="width: 100%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div>
+          <h2 style="font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 4px;">Developer Validation Dashboard</h2>
+          <p style="font-size: 13px; color: var(--text-muted); margin: 0;">Comprehensive scraping diagnostics, timing matrices, and run validation logs.</p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <label style="font-size: 11px; color: var(--text-muted);">Select Run / Batch:</label>
+          <select id="validation-batch-select" class="f-select" style="min-width: 180px;"></select>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Row -->
+      <div class="cards" style="margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px;">
+        <div class="card" style="margin: 0; padding: 12px;">
+          <div class="card-num" id="val-mode">—</div>
+          <div class="card-lbl">Collection Mode</div>
+        </div>
+        <div class="card" style="margin: 0; padding: 12px;">
+          <div class="card-num" id="val-runtime">—</div>
+          <div class="card-lbl">Total Runtime</div>
+        </div>
+        <div class="card" style="margin: 0; padding: 12px;">
+          <div class="card-num" id="val-success-rate">—</div>
+          <div class="card-lbl">Queue Success Rate</div>
+        </div>
+        <div class="card" style="margin: 0; padding: 12px;">
+          <div class="card-num" id="val-completeness">—</div>
+          <div class="card-lbl">Avg Completeness</div>
+        </div>
+        <div class="card" style="margin: 0; padding: 12px;">
+          <div class="card-num" id="val-retry-count">—</div>
+          <div class="card-lbl">Total Retries</div>
+        </div>
+      </div>
+
+      <!-- Layout Grid: Left column (Timings & Performance), Right column (Field Matrices) -->
+      <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; margin-bottom: 24px;">
+        
+        <!-- Left Side: Timings & Queue stats -->
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- Execution Timings -->
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
+            <h3 style="font-size: 14px; font-weight: 700; color: #fff; margin: 0 0 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              ⏱️ Step Timings
+            </h3>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-size: 11px;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">Stage 1 — Snapshot Collection:</span>
+                <strong style="color: #fff;" id="val-time-snapshot">—</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">Stage 2 — Queue Creation:</span>
+                <strong style="color: #fff;" id="val-time-queue">—</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">Stage 3 — Detail Enrichment:</span>
+                <strong style="color: #fff;" id="val-time-deep">—</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">Backend Merges:</span>
+                <strong style="color: #fff;" id="val-time-merge">—</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px; font-weight: bold;">
+                <span style="color: var(--text);">Avg Enrichment per Lead:</span>
+                <strong style="color: var(--accent);" id="val-time-avg-lead">—</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Queue Statistics -->
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
+            <h3 style="font-size: 14px; font-weight: 700; color: #fff; margin: 0 0 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              📋 Queue Statistics
+            </h3>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center;">
+              <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
+                <div style="font-size: 9px; color: var(--text-muted); text-transform: uppercase;">Completed</div>
+                <div style="font-size: 14px; font-weight: bold; color: var(--accent);" id="val-q-completed">0</div>
+              </div>
+              <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
+                <div style="font-size: 9px; color: var(--text-muted); text-transform: uppercase;">Failed</div>
+                <div style="font-size: 14px; font-weight: bold; color: #ea4335;" id="val-q-failed">0</div>
+              </div>
+              <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
+                <div style="font-size: 9px; color: var(--text-muted); text-transform: uppercase;">Pending</div>
+                <div style="font-size: 14px; font-weight: bold; color: #f59e0b;" id="val-q-pending">0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Side: Field Completeness Matrix & Missing Report -->
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+          <h3 style="font-size: 14px; font-weight: 700; color: #fff; margin: 0; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+            📊 Field Completeness Matrix
+          </h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <!-- Matrix Table -->
+            <div style="max-height: 250px; overflow-y: auto; border-right: 1px solid rgba(255,255,255,0.05); padding-right: 10px;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                <thead>
+                  <tr style="text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <th style="padding: 4px; color: var(--text-muted);">Field</th>
+                    <th style="padding: 4px; text-align: right; color: var(--text-muted);">Presence</th>
+                  </tr>
+                </thead>
+                <tbody id="val-matrix-tbody">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Missing Fields Report -->
+            <div>
+              <div style="font-size: 11px; font-weight: 700; color: #fff; margin-bottom: 8px;">Missing Fields</div>
+              <div id="val-missing-report" style="display: flex; flex-direction: column; gap: 6px; max-height: 230px; overflow-y: auto; font-size: 10px;">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Error Logs Section -->
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+        <h3 style="font-size: 14px; font-weight: 700; color: #fff; margin: 0 0 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px; display: flex; justify-content: space-between;">
+          <span>⚠️ Job Error Log</span>
+          <span style="font-size: 10px; font-weight: normal; color: var(--text-muted);" id="val-error-count">0 errors logged</span>
+        </h3>
+        <div style="max-height: 180px; overflow-y: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+            <thead>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--text-muted);">
+                <th style="padding: 6px; width: 15%;">Stage</th>
+                <th style="padding: 6px; width: 15%;">Category</th>
+                <th style="padding: 6px; width: 35%;">Error Message</th>
+                <th style="padding: 6px; width: 25%;">Technical Details</th>
+                <th style="padding: 6px; width: 10%;">Link</th>
+              </tr>
+            </thead>
+            <tbody id="val-errors-tbody">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 

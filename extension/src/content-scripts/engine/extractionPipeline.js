@@ -12,6 +12,7 @@ class ExtractionPipeline {
     Logger.log(`Smart Quick Collect started. Selected adapter: ${adapter.constructor.name}`);
     StateManager.setState(StateManager.states.RUNNING);
     this.queueManager.reset();
+    const snapshotLeads = [];
     
     // 1. Retrieve configured collection limit
     const storage = await chrome.storage.local.get("quickCollectLimit");
@@ -133,6 +134,11 @@ class ExtractionPipeline {
             if (result.status === "saved") {
               this.progressManager.incrementSaved();
               DOMHelpers.markWebpageListing(card, "Collected", lead);
+              snapshotLeads.push({
+                lead_id: result.lead_id,
+                business_name: lead.business_name,
+                listing_url: lead.listing_url
+              });
             } else if (result.status === "duplicate") {
               this.progressManager.incrementDuplicates();
               DOMHelpers.markWebpageListing(card, "Collected (Duplicate)", lead);
@@ -207,7 +213,12 @@ class ExtractionPipeline {
     const wasCancelled = (StateManager.getState() === StateManager.states.STOPPING || StateManager.getState() === StateManager.states.STOPPED);
     Logger.info(`Smart Quick Collect finished. Was cancelled: ${wasCancelled}`);
     
-    if (wasCancelled) {
+    if (mode === "deep" && !wasCancelled && snapshotLeads.length > 0) {
+      await this.runDeepEnrichment(adapter, batchId, snapshotLeads);
+    }
+
+    const isStopped = (StateManager.getState() === StateManager.states.STOPPING || StateManager.getState() === StateManager.states.STOPPED);
+    if (isStopped) {
       StateManager.setState(StateManager.states.STOPPED);
       this.progressManager.sendComplete(batchId);
       try {
@@ -217,6 +228,226 @@ class ExtractionPipeline {
       StateManager.setState(StateManager.states.COMPLETED);
       this.progressManager.sendComplete(batchId);
     }
+  }
+
+  async runDeepEnrichment(adapter, batchId, snapshotLeads) {
+    Logger.info(`Entering Stage 2: Building queue for ${snapshotLeads.length} leads.`);
+    
+    // Synchronize progressManager counts for deep enrichment stage
+    this.progressManager.total = snapshotLeads.length;
+    this.progressManager.current = 0;
+    this.progressManager.sendProgress("Building Enrichment Queue...");
+    
+    try {
+      await Messaging.updateJobProgress(batchId, {
+        status: "running",
+        metadata_json: { stage: "Stage 2: Building Queue", current_stage_name: "Building Queue" }
+      });
+      await Messaging.createJobQueue(batchId, snapshotLeads);
+    } catch (err) {
+      Logger.warn("Failed to create job queue in backend:", err);
+    }
+
+    Logger.info(`Entering Stage 3: Sequential listing enrichment.`);
+    let completedCount = 0;
+    let failedCount = 0;
+    let retriesCount = 0;
+
+    for (let idx = 0; idx < snapshotLeads.length; idx++) {
+      if (StateManager.getState() === StateManager.states.STOPPING || StateManager.getState() === StateManager.states.STOPPED) {
+        Logger.info("Deep Enrichment stopped by user.");
+        break;
+      }
+      while (StateManager.getState() === StateManager.states.PAUSED) {
+        await DOMHelpers.sleep(500);
+      }
+
+      const item = snapshotLeads[idx];
+      Logger.info(`Processing queue item ${idx + 1}/${snapshotLeads.length}: ${item.business_name}`);
+      
+      // Update progressManager current count
+      this.progressManager.current = idx;
+      
+      try {
+        await Messaging.updateQueueItemStatus(batchId, item.lead_id, "running");
+        await Messaging.updateJobProgress(batchId, {
+          status: "running",
+          current_listing: item.business_name,
+          progress_percentage: Math.round((idx / snapshotLeads.length) * 100),
+          metadata_json: {
+            stage: "Stage 3: Detailed Enrichment",
+            current_index: idx + 1,
+            total_items: snapshotLeads.length,
+            completed: completedCount,
+            failed: failedCount,
+            retries: retriesCount
+          }
+        });
+      } catch (err) {}
+
+      // Update progress label for popup UI
+      this.progressManager.sendProgress(`Deep Collect: ${idx + 1} / ${snapshotLeads.length}`);
+
+      let success = false;
+      let retryAttempt = 0;
+      const maxRetries = 2;
+
+      while (retryAttempt <= maxRetries && !success) {
+        if (StateManager.getState() === StateManager.states.STOPPING || StateManager.getState() === StateManager.states.STOPPED) {
+          break;
+        }
+
+        if (retryAttempt > 0) {
+          retriesCount++;
+          Logger.info(`Retrying queue item ${item.business_name} (Attempt ${retryAttempt}/${maxRetries})`);
+          try {
+            await Messaging.updateQueueItemStatus(batchId, item.lead_id, "retrying", retryAttempt);
+          } catch (err) {}
+        }
+
+        try {
+          const cardEl = this.findCardEl(item.business_name, item.listing_url);
+          if (!cardEl) {
+            throw new Error("Listing card element not found in results panel");
+          }
+
+          // Scroll into view & click
+          cardEl.scrollIntoView({ block: "center" });
+          await DOMHelpers.sleep(800);
+          
+          // Click the card
+          const clickTarget = cardEl.querySelector("a") || cardEl;
+          if (typeof clickTarget.click === "function") {
+            clickTarget.click();
+          } else {
+            const event = new MouseEvent("click", {
+              bubbles: true,
+              cancelable: true,
+              view: window
+            });
+            clickTarget.dispatchEvent(event);
+          }
+
+          // Wait for business detail panel to load and stabilize
+          const panelSelector = adapter.siteKey === "googlemaps" ? "div[role='main']" : ".store-detail";
+          const isLoaded = await this.waitPageStable(panelSelector, 12000);
+          
+          const panelEl = document.querySelector(panelSelector);
+          if (!isLoaded) {
+            // Fallback: Proceed if panel exists and contains text content, even if it didn't stabilize in time
+            if (!panelEl || panelEl.textContent.trim().length < 50) {
+              throw new Error("Detail panel failed to load or stabilize within timeout");
+            }
+            Logger.warn("Detail panel did not fully stabilize, but content is present. Proceeding with extraction...");
+          }
+
+          if (!panelEl) {
+            throw new Error("Detail panel DOM element not found");
+          }
+
+          // Extract detailed listing data
+          const deepData = adapter.extractDeepLead(panelEl);
+          
+          // Merge with existing snapshot lead in DB
+          const mergeRes = await Messaging.mergeLeadData(batchId, item.lead_id, deepData);
+          if (mergeRes.status !== "ok") {
+            throw new Error(`Merge request failed: ${mergeRes.message}`);
+          }
+
+          success = true;
+          completedCount++;
+          Logger.info(`Successfully enriched lead: ${item.business_name}`);
+          try {
+            await Messaging.updateQueueItemStatus(batchId, item.lead_id, "completed");
+          } catch (err) {}
+          
+          DOMHelpers.markWebpageListing(cardEl, "Enriched", deepData);
+          
+          // Small delay for natural pacing
+          await DOMHelpers.sleep(1500);
+
+        } catch (err) {
+          Logger.error(`Error enriching lead '${item.business_name}':`, err);
+          retryAttempt++;
+          if (retryAttempt > maxRetries) {
+            failedCount++;
+            try {
+              await Messaging.updateQueueItemStatus(batchId, item.lead_id, "failed");
+            } catch (err) {}
+          } else {
+            await DOMHelpers.sleep(2000); // Wait before retry
+          }
+        }
+      }
+    }
+
+    try {
+      await Messaging.updateJobProgress(batchId, {
+        status: "completed",
+        progress_percentage: 100,
+        metadata_json: {
+          stage: "Completed",
+          total_items: snapshotLeads.length,
+          completed: completedCount,
+          failed: failedCount,
+          retries: retriesCount
+        }
+      });
+    } catch (err) {}
+  }
+
+  findCardEl(businessName, listingUrl) {
+    if (listingUrl) {
+      const links = document.querySelectorAll("a");
+      for (const link of links) {
+        const href = link.getAttribute("href") || "";
+        if (href && (href.includes(listingUrl) || listingUrl.includes(href))) {
+          return link.closest(".Nv2PK") || link.closest(".store-name") || link;
+        }
+      }
+    }
+    const spans = document.querySelectorAll("span, div, a");
+    const targetName = businessName.toLowerCase().trim();
+    for (const el of spans) {
+      const text = el.textContent?.trim() || "";
+      if (text && text.toLowerCase().trim() === targetName) {
+        return el.closest(".Nv2PK") || el.closest(".store-name") || el;
+      }
+    }
+    return null;
+  }
+
+  async waitPageStable(selector, timeoutMs = 12000) {
+    return new Promise((resolve) => {
+      let lastHTML = "";
+      let stableTicks = 0;
+      const interval = 100;
+      let elapsed = 0;
+
+      const timer = setInterval(() => {
+        elapsed += interval;
+        const el = document.querySelector(selector);
+        if (el) {
+          const currentHTML = el.innerHTML;
+          // Check if HTML is stable and has loaded content
+          if (currentHTML === lastHTML && currentHTML.length > 300) {
+            stableTicks++;
+            if (stableTicks >= 4) { // stable for 400ms
+              clearInterval(timer);
+              resolve(true);
+            }
+          } else {
+            stableTicks = 0;
+            lastHTML = currentHTML;
+          }
+        }
+        
+        if (elapsed >= timeoutMs) {
+          clearInterval(timer);
+          resolve(false);
+        }
+      }, interval);
+    });
   }
 }
 window.ExtractionPipeline = ExtractionPipeline;

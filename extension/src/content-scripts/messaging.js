@@ -99,6 +99,45 @@ const Messaging = {
         resolve(response || { status: "error" });
       });
     });
+  },
+
+  createJobQueue(jobId, items) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        action: "CREATE_JOB_QUEUE",
+        jobId: jobId,
+        items: items
+      }, (response) => {
+        resolve(response || { status: "error" });
+      });
+    });
+  },
+
+  updateQueueItemStatus(jobId, leadId, status, retryCount = 0) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        action: "UPDATE_QUEUE_ITEM_STATUS",
+        jobId: jobId,
+        leadId: leadId,
+        status: status,
+        retryCount: retryCount
+      }, (response) => {
+        resolve(response || { status: "error" });
+      });
+    });
+  },
+
+  mergeLeadData(jobId, leadId, deepLeadData) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        action: "MERGE_LEAD_DATA",
+        jobId: jobId,
+        leadId: leadId,
+        deepData: deepLeadData
+      }, (response) => {
+        resolve(response || { status: "error" });
+      });
+    });
   }
 };
 window.Messaging = Messaging;

@@ -225,6 +225,7 @@ class CollectionJobProgressUpdate(BaseModel):
 
 class CollectionJobStatusUpdate(BaseModel):
     status: str # completed / failed / cancelled
+    metadata_json: Optional[dict] = None
 
 @router.post("/collection-jobs")
 def register_collection_job(job_in: CollectionJobCreate, session: Session = Depends(get_session)):
@@ -301,6 +302,10 @@ def update_collection_job_status(job_id: str, status_up: CollectionJobStatusUpda
         delta = job.end_time - job.start_time
         job.duration = delta.total_seconds()
         
+    if status_up.metadata_json:
+        import json
+        job.metadata_json = json.dumps(status_up.metadata_json)
+        
     job.updated_at = datetime.utcnow()
     session.add(job)
     session.commit()
@@ -327,3 +332,373 @@ def get_recent_collection_jobs(session: Session = Depends(get_session)):
         select(CollectionJob).order_by(CollectionJob.created_at.desc()).limit(15)
     ).all()
     return {"status": "ok", "jobs": jobs}
+
+
+# ==============================================================================
+# DEEP COLLECT QUEUE ENDPOINTS (Sprint 5)
+# ==============================================================================
+
+from database.models import DeepQueueItem, Lead, Contact
+from typing import List
+
+class QueueItemCreate(BaseModel):
+    lead_id: str
+    business_name: str
+    listing_url: Optional[str] = ""
+
+class QueueCreatePayload(BaseModel):
+    items: List[QueueItemCreate]
+
+@router.post("/collection-jobs/{job_id}/queue")
+def create_collection_job_queue(job_id: str, payload: QueueCreatePayload, session: Session = Depends(get_session)):
+    """Deletes existing queue and inserts new enrichment queue items for a job."""
+    items = session.exec(
+        select(DeepQueueItem).where(DeepQueueItem.job_id == job_id)
+    ).all()
+    for item in items:
+        session.delete(item)
+    session.commit()
+    
+    for idx, item_in in enumerate(payload.items):
+        q_item = DeepQueueItem(
+            lead_id=item_in.lead_id,
+            job_id=job_id,
+            business_name=item_in.business_name,
+            listing_url=item_in.listing_url,
+            queue_position=idx + 1,
+            status="pending"
+        )
+        session.add(q_item)
+    session.commit()
+    return {"status": "ok", "queued_count": len(payload.items)}
+
+@router.get("/collection-jobs/{job_id}/queue")
+def get_collection_job_queue(job_id: str, session: Session = Depends(get_session)):
+    """Retrieves all queue items for a job, sorted by position."""
+    items = session.exec(
+        select(DeepQueueItem).where(DeepQueueItem.job_id == job_id).order_by(DeepQueueItem.queue_position.asc())
+    ).all()
+    return {"status": "ok", "items": items}
+
+class QueueStatusUpdate(BaseModel):
+    status: str
+    retry_count: Optional[int] = None
+
+@router.post("/collection-jobs/{job_id}/queue/{lead_id}/status")
+def update_queue_item_status(job_id: str, lead_id: str, status_up: QueueStatusUpdate, session: Session = Depends(get_session)):
+    """Updates the status and retry counts of a queue item."""
+    q_item = session.exec(
+        select(DeepQueueItem).where(
+            (DeepQueueItem.job_id == job_id) & (DeepQueueItem.lead_id == lead_id)
+        )
+    ).first()
+    
+    if not q_item:
+        raise HTTPException(status_code=404, detail="Queue item not found")
+        
+    q_item.status = status_up.status
+    if status_up.retry_count is not None:
+        q_item.retry_count = status_up.retry_count
+        
+    if status_up.status == "running":
+        q_item.started_at = datetime.utcnow()
+    elif status_up.status in ["completed", "failed", "skipped"]:
+        q_item.completed_at = datetime.utcnow()
+        
+    q_item.updated_at = datetime.utcnow()
+    session.add(q_item)
+    session.commit()
+    session.refresh(q_item)
+    return {"status": "ok", "item": q_item}
+
+class LeadMergePayload(BaseModel):
+    website: Optional[str] = None
+    website_domain: Optional[str] = None
+    primary_phone: Optional[str] = None
+    secondary_phones: Optional[str] = None
+    primary_email: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    postal_code: Optional[str] = None
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+    open_status: Optional[str] = None
+    price_level: Optional[str] = None
+    displayed_price: Optional[str] = None
+    contacts: Optional[List[dict]] = None
+    flexible_metadata: Optional[dict] = None
+
+@router.post("/collection-jobs/{job_id}/queue/{lead_id}/merge")
+def merge_queue_lead_data(job_id: str, lead_id: str, payload: LeadMergePayload, session: Session = Depends(get_session)):
+    """Merges detailed enrichment data into the existing Snapshot Lead."""
+    lead = session.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+        
+    import json
+    
+    # 1. Update standard fields
+    for field in ["website", "website_domain", "primary_phone", "secondary_phones", 
+                  "primary_email", "address", "city", "state", "postal_code",
+                  "rating", "review_count", "open_status", "price_level", "displayed_price"]:
+        deep_val = getattr(payload, field, None)
+        if deep_val is None or deep_val == "":
+            continue
+            
+        snap_val = getattr(lead, field, None)
+        if not snap_val:
+            setattr(lead, field, deep_val)
+        else:
+            if isinstance(deep_val, str) and isinstance(snap_val, str):
+                if len(deep_val) >= len(snap_val):
+                    setattr(lead, field, deep_val)
+            else:
+                setattr(lead, field, deep_val)
+                
+    # 2. Merge flexible_metadata JSON
+    if payload.flexible_metadata:
+        try:
+            snap_meta = json.loads(lead.flexible_metadata) if lead.flexible_metadata else {}
+        except:
+            snap_meta = {}
+        merged_meta = {**snap_meta, **payload.flexible_metadata}
+        lead.flexible_metadata = json.dumps(merged_meta)
+        
+    # Calculate completeness
+    from services.collection_pipeline import calculate_lead_completeness
+    contacts_list = payload.contacts or []
+    comp_score = calculate_lead_completeness(lead, contacts_list)
+    lead.completeness_score = comp_score
+    lead.status = "Incomplete" if comp_score < 50.0 else "New"
+    lead.collection_status = "success"  # Explicitly mark collection as success
+    lead.updated_at = datetime.utcnow()
+    session.add(lead)
+    
+    # 2.5 Auto-register primary phone & email in contacts table if they don't exist
+    if lead.primary_phone:
+        exists_phone = session.exec(
+            select(Contact).where(
+                (Contact.lead_id == lead_id) &
+                (Contact.contact_type == "phone") &
+                (Contact.contact_value == lead.primary_phone)
+            )
+        ).first()
+        if not exists_phone:
+            new_phone = Contact(
+                lead_id=lead_id,
+                contact_type="phone",
+                contact_value=lead.primary_phone,
+                sequence_number=1,
+                source="deep_collect"
+            )
+            session.add(new_phone)
+
+    if lead.primary_email:
+        exists_email = session.exec(
+            select(Contact).where(
+                (Contact.lead_id == lead_id) &
+                (Contact.contact_type == "email") &
+                (Contact.contact_value == lead.primary_email)
+            )
+        ).first()
+        if not exists_email:
+            new_email = Contact(
+                lead_id=lead_id,
+                contact_type="email",
+                contact_value=lead.primary_email,
+                sequence_number=1,
+                source="deep_collect"
+            )
+            session.add(new_email)
+    
+    # 3. Add any new contacts from payload
+    for idx, c in enumerate(contacts_list):
+        c_val = c.get("contact_value")
+        c_type = c.get("contact_type", "phone")
+        if not c_val:
+            continue
+            
+        exists = session.exec(
+            select(Contact).where(
+                (Contact.lead_id == lead_id) & 
+                (Contact.contact_type == c_type) & 
+                (Contact.contact_value == c_val)
+            )
+        ).first()
+        if not exists:
+            new_c = Contact(
+                lead_id=lead_id,
+                contact_type=c_type,
+                contact_value=c_val,
+                sequence_number=idx + 2, # offset from primary contacts
+                source="deep_collect"
+            )
+            session.add(new_c)
+            
+    # 4. Mark queue item as completed
+    q_item = session.exec(
+        select(DeepQueueItem).where(
+            (DeepQueueItem.job_id == job_id) & (DeepQueueItem.lead_id == lead_id)
+        )
+    ).first()
+    if q_item:
+        q_item.status = "completed"
+        q_item.completed_at = datetime.utcnow()
+        q_item.updated_at = datetime.utcnow()
+        session.add(q_item)
+        
+    session.commit()
+    return {"status": "ok", "lead": lead}
+
+@router.get("/collection-jobs/{job_id}/validation")
+def get_job_validation_metrics(job_id: str, session: Session = Depends(get_session)):
+    """
+    Returns diagnostic validation metrics, completeness matrices, missing fields reports,
+    extraction timings, and error logs for a specific collection job.
+    """
+    from database.models import Lead, DeepQueueItem, CollectionError
+    import json
+
+    job = session.get(CollectionJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # 1. Basic Stats
+    leads = session.exec(select(Lead).where(Lead.batch_id == job_id)).all()
+    queue_items = session.exec(select(DeepQueueItem).where(DeepQueueItem.job_id == job_id)).all()
+    
+    total_leads = len(leads)
+    completed_q = sum(1 for q in queue_items if q.status == "completed")
+    total_q = len(queue_items)
+    queue_success_rate = (completed_q / total_q * 100) if total_q > 0 else 100.0
+    
+    avg_completeness = sum(l.completeness_score or 0.0 for l in leads) / total_leads if total_leads > 0 else 0.0
+
+    # 2. Field Completeness Matrix
+    fields_to_track = [
+        "primary_phone", "secondary_phones", "website", "primary_email", "address", 
+        "city", "state", "postal_code", "rating", "review_count", "price_level",
+        "description", "business_hours", "reservation_link", "booking_link", 
+        "order_link", "latitude", "longitude", "plus_code", "amenities", 
+        "accessibility_features", "popular_times", "photo_urls", "owner_claimed", 
+        "social_links", "hotel_prices", "business_status", "directions_url"
+    ]
+    
+    field_counts = {f: 0 for f in fields_to_track}
+    
+    for lead in leads:
+        # Standard fields
+        for field in ["primary_phone", "secondary_phones", "website", "primary_email", "address", "city", "state", "postal_code", "rating", "review_count", "price_level"]:
+            val = getattr(lead, field, None)
+            if val is not None and val != "" and val != 0 and val != 0.0:
+                field_counts[field] += 1
+                
+        # Flexible metadata fields
+        meta = {}
+        if lead.flexible_metadata:
+            try:
+                meta = json.loads(lead.flexible_metadata)
+            except:
+                pass
+        for field in ["description", "business_hours", "reservation_link", "booking_link", "order_link", "latitude", "longitude", "plus_code", "amenities", "accessibility_features", "popular_times", "photo_urls", "owner_claimed", "social_links", "hotel_prices", "business_status", "directions_url"]:
+            val = meta.get(field)
+            if val is not None and val != "" and val != [] and val != {}:
+                field_counts[field] += 1
+
+    field_completeness = {}
+    for f in fields_to_track:
+        field_completeness[f] = round((field_counts[f] / total_leads * 100), 1) if total_leads > 0 else 0.0
+
+    # 3. Missing Fields Report (sorted by percent missing, highest first)
+    missing_report = []
+    for f in fields_to_track:
+        present_count = field_counts[f]
+        missing_count = total_leads - present_count
+        missing_pct = round((missing_count / total_leads * 100), 1) if total_leads > 0 else 0.0
+        if missing_count > 0:
+            missing_report.append({
+                "field": f,
+                "missing_count": missing_count,
+                "missing_percentage": missing_pct
+            })
+    missing_report.sort(key=lambda x: x["missing_percentage"], reverse=True)
+
+    # 4. Extraction Timing
+    job_meta = {}
+    if job.metadata_json:
+        try:
+            job_meta = json.loads(job.metadata_json)
+        except:
+            pass
+            
+    snapshot_time = job_meta.get("snapshot_time", 0.0)
+    queue_time = job_meta.get("queue_time", 0.0)
+    merge_time = job_meta.get("merge_time", 0.0)
+
+    completed_durations = []
+    total_retries = 0
+    for q in queue_items:
+        total_retries += q.retry_count
+        if q.started_at and q.completed_at and q.status == "completed":
+            dur = (q.completed_at - q.started_at).total_seconds()
+            completed_durations.append(dur)
+            
+    total_deep_time = sum(completed_durations)
+    avg_deep_time = sum(completed_durations) / len(completed_durations) if len(completed_durations) > 0 else 0.0
+
+    # 5. Error Logs
+    errors_list = session.exec(select(CollectionError).where(CollectionError.batch_id == job_id)).all()
+    error_logs = []
+    for err in errors_list:
+        error_logs.append({
+            "error_id": err.error_id,
+            "error_category": err.error_category,
+            "error_message": err.error_message,
+            "collection_stage": err.collection_stage,
+            "lead_id": err.lead_id,
+            "listing_url": err.listing_url,
+            "technical_details": err.technical_details,
+            "created_at": err.created_at.isoformat() if err.created_at else None
+        })
+
+    # 6. Queue stats
+    q_stats = {
+        "pending": sum(1 for q in queue_items if q.status == "pending"),
+        "running": sum(1 for q in queue_items if q.status == "running"),
+        "completed": completed_q,
+        "failed": sum(1 for q in queue_items if q.status == "failed"),
+        "skipped": sum(1 for q in queue_items if q.status == "skipped"),
+        "retrying": sum(1 for q in queue_items if q.status == "retrying"),
+    }
+
+    return {
+        "status": "ok",
+        "validation": {
+            "job_id": job_id,
+            "website": job.source,
+            "mode": job.mode,
+            "runtime": job.duration or 0.0,
+            "total_seen": job.total_seen,
+            "saved": job.saved,
+            "duplicates": job.duplicates,
+            "failed_extractions": job.errors,
+            "queue_success_rate": queue_success_rate,
+            "average_completeness_score": avg_completeness,
+            "field_completeness_matrix": field_completeness,
+            "missing_fields_report": missing_report,
+            "timings": {
+                "snapshot_time": snapshot_time,
+                "queue_time": queue_time,
+                "deep_extraction_time": total_deep_time,
+                "merge_time": merge_time,
+                "avg_extraction_time_per_lead": avg_deep_time
+            },
+            "performance": {
+                "avg_extraction_time": avg_deep_time,
+                "retry_count": total_retries,
+                "queue_stats": q_stats
+            },
+            "error_logs": error_logs
+        }
+    }

@@ -40,11 +40,8 @@ async function updateBadge() {
   }
 }
 
-// ============================================================
-// MESSAGE RELAY
-// Receives messages from content scripts and popup,
-// forwards them to the correct destination.
-// ============================================================
+const jobTimings = {};
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "START_ENGINE") {
@@ -133,6 +130,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "CREATE_JOB") {
+    // Record snapshot start time
+    const jobId = message.jobId;
+    jobTimings[jobId] = {
+      snapshot_start: Date.now(),
+      snapshot_time: 0,
+      queue_start: 0,
+      queue_time: 0,
+      merge_start_times: {},
+      merge_times: []
+    };
+
     fetch(`${API_BASE}/collection-jobs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -171,15 +179,99 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "UPDATE_JOB_STATUS") {
+    const jobId = message.jobId;
+    let metadata = null;
+    if (jobTimings[jobId]) {
+      const timings = jobTimings[jobId];
+      const totalMergeTime = timings.merge_times.reduce((a, b) => a + b, 0);
+      metadata = {
+        snapshot_time: timings.snapshot_time || 0.0,
+        queue_time: timings.queue_time || 0.0,
+        merge_time: totalMergeTime || 0.0
+      };
+      delete jobTimings[jobId];
+    }
+
     fetch(`${API_BASE}/collection-jobs/${message.jobId}/status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: message.status })
+      body: JSON.stringify({ 
+        status: message.status,
+        metadata_json: metadata
+      })
     })
     .then(r => r.json())
     .then(data => sendResponse(data))
     .catch(err => {
       console.error("[Background] UPDATE_JOB_STATUS failed:", err);
+      sendResponse({ status: "error", message: err.message });
+    });
+    return true; // Keep channel open
+  }
+
+  if (message.action === "CREATE_JOB_QUEUE") {
+    const jobId = message.jobId;
+    if (jobTimings[jobId]) {
+      jobTimings[jobId].snapshot_time = (Date.now() - jobTimings[jobId].snapshot_start) / 1000;
+      jobTimings[jobId].queue_start = Date.now();
+    }
+
+    fetch(`${API_BASE}/collection-jobs/${message.jobId}/queue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: message.items })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (jobTimings[message.jobId] && jobTimings[message.jobId].queue_start) {
+        jobTimings[message.jobId].queue_time = (Date.now() - jobTimings[message.jobId].queue_start) / 1000;
+      }
+      sendResponse(data);
+    })
+    .catch(err => {
+      console.error("[Background] CREATE_JOB_QUEUE failed:", err);
+      sendResponse({ status: "error", message: err.message });
+    });
+    return true; // Keep channel open
+  }
+
+  if (message.action === "UPDATE_QUEUE_ITEM_STATUS") {
+    fetch(`${API_BASE}/collection-jobs/${message.jobId}/queue/${message.leadId}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: message.status, retry_count: message.retryCount })
+    })
+    .then(r => r.json())
+    .then(data => sendResponse(data))
+    .catch(err => {
+      console.error("[Background] UPDATE_QUEUE_ITEM_STATUS failed:", err);
+      sendResponse({ status: "error", message: err.message });
+    });
+    return true; // Keep channel open
+  }
+
+  if (message.action === "MERGE_LEAD_DATA") {
+    const jobId = message.jobId;
+    const leadId = message.leadId;
+    if (jobTimings[jobId]) {
+      jobTimings[jobId].merge_start_times[leadId] = Date.now();
+    }
+
+    fetch(`${API_BASE}/collection-jobs/${message.jobId}/queue/${message.leadId}/merge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(message.deepData)
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (jobTimings[message.jobId] && jobTimings[message.jobId].merge_start_times[message.leadId]) {
+        const dur = (Date.now() - jobTimings[message.jobId].merge_start_times[message.leadId]) / 1000;
+        jobTimings[message.jobId].merge_times.push(dur);
+      }
+      sendResponse(data);
+    })
+    .catch(err => {
+      console.error("[Background] MERGE_LEAD_DATA failed:", err);
       sendResponse({ status: "error", message: err.message });
     });
     return true; // Keep channel open

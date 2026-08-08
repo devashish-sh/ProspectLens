@@ -140,5 +140,9 @@ class BaseAdapter {
       secondary_phones: null
     };
   }
+
+  extractDeepLead(panel) {
+    return {};
+  }
 }
 window.BaseAdapter = BaseAdapter;

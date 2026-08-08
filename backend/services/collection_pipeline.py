@@ -135,10 +135,14 @@ class CollectionPipeline:
             except Exception as e:
                 print(f"[DB] Error incrementing job duplicate counter: {e}")
 
+            # Retrieve existing lead_id
+            existing_lead = session.exec(select(Lead).where(Lead.dedup_hash == dedup_hash)).first()
+            existing_id = existing_lead.lead_id if existing_lead else None
+
             return {
                 "status": "duplicate",
                 "message": f"Lead '{biz_name}' already exists — skipped",
-                "lead_id": None
+                "lead_id": existing_id
             }
 
         # Step 3.5: Validate that batch source_site matches lead source_site to keep capsules isolated

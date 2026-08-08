@@ -282,30 +282,80 @@ function setupModeSelector() {
 // ============================================================
 // START COLLECTION
 // Sends a message to collector.js running on the active tab
-function showRunningUI() {
+let completionTimeoutId = null;
+
+function setCollectionState(state) {
   const collectBtn = document.getElementById("collect-btn");
   const collectionControls = document.getElementById("collection-controls");
+  const pauseBtn = document.getElementById("btn-pause-collection");
+  const resumeBtn = document.getElementById("btn-resume-collection");
   const progressContainer = document.getElementById("progress-container");
   const richProgress = document.getElementById("rich-progress");
+  const runtimeContainer = document.getElementById("runtime-container");
+  const progressText = document.getElementById("progress-text");
+  const progressFill = document.getElementById("progress-fill");
+  const pStat = document.getElementById("prog-status");
 
-  if (collectBtn) collectBtn.classList.add("hidden");
-  if (collectionControls) collectionControls.classList.remove("hidden");
-  if (progressContainer) progressContainer.classList.remove("hidden");
-  if (richProgress) richProgress.classList.remove("hidden");
+  // Clear any existing completion timeout
+  if (completionTimeoutId) {
+    clearTimeout(completionTimeoutId);
+    completionTimeoutId = null;
+  }
+
+  if (state === "idle") {
+    // 1. Idle State (Default)
+    if (runtimeContainer) runtimeContainer.classList.add("hidden");
+    if (collectBtn) {
+      collectBtn.classList.remove("hidden");
+      collectBtn.disabled = false;
+      collectBtn.classList.remove("running");
+      const btnText = collectBtn.querySelector(".collect-btn-text");
+      if (btnText) btnText.textContent = "Start Collection";
+    }
+  } else if (state === "running") {
+    // 2. Running State
+    if (collectBtn) collectBtn.classList.add("hidden");
+    if (runtimeContainer) runtimeContainer.classList.remove("hidden");
+    if (collectionControls) collectionControls.classList.remove("hidden");
+    if (pauseBtn) pauseBtn.classList.remove("hidden");
+    if (resumeBtn) resumeBtn.classList.add("hidden");
+    if (progressContainer) progressContainer.classList.remove("hidden");
+    if (richProgress) richProgress.classList.remove("hidden");
+  } else if (state === "paused") {
+    // 3. Paused State
+    if (collectBtn) collectBtn.classList.add("hidden");
+    if (runtimeContainer) runtimeContainer.classList.remove("hidden");
+    if (collectionControls) collectionControls.classList.remove("hidden");
+    if (pauseBtn) pauseBtn.classList.add("hidden");
+    if (resumeBtn) resumeBtn.classList.remove("hidden");
+    if (progressContainer) progressContainer.classList.remove("hidden");
+    if (richProgress) richProgress.classList.remove("hidden");
+    if (pStat) pStat.textContent = "Paused";
+  } else if (state === "completed") {
+    // 4. Completed State
+    if (collectBtn) collectBtn.classList.add("hidden");
+    if (runtimeContainer) runtimeContainer.classList.remove("hidden");
+    if (collectionControls) collectionControls.classList.add("hidden"); // Hide control buttons on completion
+    if (progressContainer) progressContainer.classList.remove("hidden");
+    if (richProgress) richProgress.classList.remove("hidden");
+    
+    if (progressFill) progressFill.style.width = "100%";
+    if (progressText) progressText.textContent = "✓ Collection Complete";
+    if (pStat) pStat.textContent = "Completed";
+
+    // Revert to idle after 4 seconds
+    completionTimeoutId = setTimeout(() => {
+      setCollectionState("idle");
+    }, 4000); // 4 seconds
+  }
+}
+
+function showRunningUI() {
+  setCollectionState("running");
 }
 
 function resetCollectButton() {
-  const collectBtn = document.getElementById("collect-btn");
-  const collectionControls = document.getElementById("collection-controls");
-
-  if (collectBtn) {
-    collectBtn.classList.remove("hidden");
-    collectBtn.disabled = false;
-    collectBtn.classList.remove("running");
-    const btnText = collectBtn.querySelector(".collect-btn-text");
-    if (btnText) btnText.textContent = "Start Collection";
-  }
-  if (collectionControls) collectionControls.classList.add("hidden");
+  setCollectionState("idle");
 }
 
 // ============================================================
@@ -374,10 +424,7 @@ async function startCollection(site) {
 }
 
 function resetCollectButton() {
-  const collectBtn = document.getElementById("collect-btn");
-  collectBtn.disabled = false;
-  collectBtn.classList.remove("running");
-  collectBtn.querySelector(".collect-btn-text").textContent = "Start Collection";
+  setCollectionState("idle");
 }
 
 // ============================================================
@@ -567,7 +614,11 @@ async function init() {
   // Unified real-time progress message listener
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.action === "COLLECTION_PROGRESS") {
-      showRunningUI();
+      if (msg.status === "Paused") {
+        setCollectionState("paused");
+      } else {
+        setCollectionState("running");
+      }
       
       const pct = msg.total > 0 ? Math.min(Math.round((msg.done / msg.total) * 100), 100) : 50;
       const progressFill = document.getElementById("progress-fill");
@@ -587,34 +638,13 @@ async function init() {
       if (pDup) pDup.textContent = msg.duplicates;
       if (pFail) pFail.textContent = msg.failed;
       if (pStat) pStat.textContent = msg.status || "Extracting...";
-
-      const pauseBtn = document.getElementById("btn-pause-collection");
-      const resumeBtn = document.getElementById("btn-resume-collection");
-
-      if (msg.status === "Paused") {
-        if (pauseBtn) pauseBtn.classList.add("hidden");
-        if (resumeBtn) resumeBtn.classList.remove("hidden");
-      } else {
-        if (pauseBtn) pauseBtn.classList.remove("hidden");
-        if (resumeBtn) resumeBtn.classList.add("hidden");
-      }
     }
 
     if (msg.action === "COLLECTION_COMPLETE") {
-      const progressFill = document.getElementById("progress-fill");
-      const progressText = document.getElementById("progress-text");
-      
-      if (progressFill) progressFill.style.width = "100%";
-      
-      if (currentMode === "deep") {
-        if (progressText) progressText.textContent = "✅ Sweeper complete! Launching deep detail extractor in background...";
-      } else {
-        if (progressText) progressText.textContent = `✅ Done — ${msg.saved} leads saved, ${msg.duplicates} duplicates skipped`;
-      }
+      setCollectionState("completed");
 
       loadStats();
       loadRecentBatches();
-      resetCollectButton();
       broadcastStateUpdate();
       
       if (currentMode === "deep") {
@@ -624,12 +654,21 @@ async function init() {
           body: JSON.stringify({ batch_id: msg.batch_id, job_type: "deep_collect" })
         });
       }
+
+      // Redirect if developer mode is enabled
+      chrome.storage.local.get(["developerMode", "openDashboardAfterCollect"]).then((data) => {
+        if (data.developerMode) {
+          chrome.tabs.create({ url: chrome.runtime.getURL(`src/popup/pages/dashboard.html?batch_id=${msg.batch_id}#dev-validation`) });
+        } else if (data.openDashboardAfterCollect) {
+          chrome.tabs.create({ url: chrome.runtime.getURL("src/popup/pages/dashboard.html#leads") });
+        }
+      });
     }
 
     if (msg.action === "COLLECTION_ERROR") {
       const progressText = document.getElementById("progress-text");
       if (progressText) progressText.textContent = `❌ Error: ${msg.message}`;
-      resetCollectButton();
+      setCollectionState("idle");
     }
   });
 
@@ -637,7 +676,7 @@ async function init() {
   chrome.storage.local.get("collectionProgress").then((res) => {
     const progress = res.collectionProgress;
     if (progress && (progress.state === "Running" || progress.state === "Paused" || progress.state === "Stopping")) {
-      showRunningUI();
+      setCollectionState(progress.status === "Paused" ? "paused" : "running");
       
       const pct = progress.total > 0 ? Math.min(Math.round((progress.current / progress.total) * 100), 100) : 50;
       const progressFill = document.getElementById("progress-fill");
@@ -657,22 +696,13 @@ async function init() {
       if (pDup) pDup.textContent = progress.duplicates;
       if (pFail) pFail.textContent = progress.failed;
       if (pStat) pStat.textContent = progress.status || "Extracting...";
-
-      const pauseBtn = document.getElementById("btn-pause-collection");
-      const resumeBtn = document.getElementById("btn-resume-collection");
-
-      if (progress.status === "Paused") {
-        if (pauseBtn) pauseBtn.classList.add("hidden");
-        if (resumeBtn) resumeBtn.classList.remove("hidden");
-      } else {
-        if (pauseBtn) pauseBtn.classList.remove("hidden");
-        if (resumeBtn) resumeBtn.classList.add("hidden");
-      }
+    } else {
+      setCollectionState("idle");
     }
   });
 
   // Load current engine state and settings from storage on startup
-  chrome.storage.local.get(["engineState", "launcherPath", "lastStartupTime", "lastShutdownTime"]).then((data) => {
+  chrome.storage.local.get(["engineState", "launcherPath", "lastStartupTime", "lastShutdownTime", "developerMode"]).then((data) => {
     const state = data.engineState || "OFFLINE";
     syncEngineStateUI(state, data.lastStartupTime, data.lastShutdownTime);
     
@@ -680,13 +710,25 @@ async function init() {
     if (pathInput) {
       pathInput.value = data.launcherPath || "C:\\Users\\devas\\Desktop\\ProspectLens\\start.bat";
     }
+
+    const devModeInput = document.getElementById("sett-dev-mode");
+    if (devModeInput) {
+      devModeInput.checked = !!data.developerMode;
+      devModeInput.addEventListener("change", () => {
+        chrome.storage.local.set({ developerMode: devModeInput.checked });
+      });
+    }
   });
 
   // Listen to storage changes to keep popup state in sync
   chrome.storage.onChanged.addListener((changes) => {
-    chrome.storage.local.get(["engineState", "lastStartupTime", "lastShutdownTime"]).then((data) => {
+    chrome.storage.local.get(["engineState", "lastStartupTime", "lastShutdownTime", "developerMode"]).then((data) => {
       const state = data.engineState || "OFFLINE";
       syncEngineStateUI(state, data.lastStartupTime, data.lastShutdownTime);
+      const devModeInput = document.getElementById("sett-dev-mode");
+      if (devModeInput) {
+        devModeInput.checked = !!data.developerMode;
+      }
     });
   });
 
