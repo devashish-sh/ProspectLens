@@ -18,6 +18,11 @@ const adapters = [
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   Logger.log("Received message from popup:", message);
   
+  if (message.action === "PING") {
+    sendResponse({ status: "pong" });
+    return true;
+  }
+  
   if (message.action === "START_COLLECTION") {
     sendResponse({ status: "started" });
     

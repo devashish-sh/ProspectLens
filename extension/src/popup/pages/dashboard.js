@@ -179,17 +179,66 @@ async function loadStats() {
 // ============================================================
 // COLLECTION JOBS TRACKER LOADER (Sprint 4.5)
 // ============================================================
+async function isJobGenuinelyActive(jobId) {
+  if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) {
+    return false;
+  }
+  try {
+    const storage = await chrome.storage.local.get(["activeJobId", "activeJobTabId", "collectionProgress"]);
+    
+    // If no activeJobId in storage, or it doesn't match the jobId we are checking
+    if (!storage.activeJobId || storage.activeJobId !== jobId) {
+      return false;
+    }
+    
+    // Check stored state of progress
+    const progress = storage.collectionProgress;
+    if (progress && ["Completed", "Stopped", "Failed", "Collection Stopped", "Collection Complete"].includes(progress.state)) {
+      return false;
+    }
+    
+    // Verify tab exists and is responsive to ping
+    if (storage.activeJobTabId) {
+      const isTabAlive = await new Promise((resolve) => {
+        chrome.tabs.sendMessage(storage.activeJobTabId, { action: "PING" }, (res) => {
+          if (chrome.runtime.lastError) {
+            resolve(false);
+          } else {
+            resolve(res && res.status === "pong");
+          }
+        });
+      });
+      return isTabAlive;
+    }
+    
+    // Fallback to checking active state in progress
+    if (progress && (progress.state === "Running" || progress.state === "Paused" || progress.state === "Stopping")) {
+      return true;
+    }
+  } catch (e) {
+    console.warn("Active job check failed, assuming inactive", e);
+  }
+  return false;
+}
+
 async function loadCollectionJobs() {
+  const activeJobContainer = document.getElementById("active-job-container");
+  const noActiveJobPlaceholder = document.getElementById("no-active-job-placeholder");
+
   try {
     // 1. Fetch active collection job
     const activeRes = await fetch(`${API_BASE}/collection-jobs/active`);
     const activeData = await activeRes.json();
     
-    const activeJobContainer = document.getElementById("active-job-container");
-    const noActiveJobPlaceholder = document.getElementById("no-active-job-placeholder");
+    let showJob = false;
+    let job = null;
     
     if (activeData.status === "ok" && activeData.job) {
-      const job = activeData.job;
+      job = activeData.job;
+      showJob = await isJobGenuinelyActive(job.job_id);
+    }
+    
+    if (showJob && job) {
       if (activeJobContainer) activeJobContainer.style.display = "block";
       if (noActiveJobPlaceholder) noActiveJobPlaceholder.style.display = "none";
       
@@ -231,7 +280,7 @@ async function loadCollectionJobs() {
       
       const errorsEl = document.getElementById("active-job-errors");
       if (errorsEl) errorsEl.textContent = job.errors || 0;
-
+ 
       // Handle Deep Collect Stage Info (Sprint 5)
       const deepDetails = document.getElementById("active-job-deep-details");
       if (deepDetails) {
@@ -326,6 +375,8 @@ async function loadCollectionJobs() {
     }
   } catch (err) {
     console.error("Failed to load collection jobs tracker", err);
+    if (activeJobContainer) activeJobContainer.style.display = "none";
+    if (noActiveJobPlaceholder) noActiveJobPlaceholder.style.display = "block";
   }
 }
 
@@ -1109,9 +1160,12 @@ async function rejectSelectedLeadsAction() {
   const leadIds = Array.from(checked).map(cb => cb.getAttribute("data-id"));
   
   try {
-    await Promise.all(leadIds.map(leadId => 
-      fetch(`${API_BASE}/leads/${leadId}`, { method: "DELETE" })
-    ));
+    const res = await fetch(`${API_BASE}/leads/bulk-delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_ids: leadIds })
+    });
+    if (!res.ok) throw new Error("Failed to delete selected leads");
     
     loadReviewQueue();
     const batchRes = await fetch(`${API_BASE}/batches`);
@@ -1391,9 +1445,12 @@ async function bulkDeleteWorkspaceLeads() {
   const leadIds = Array.from(selectedCapsuleLeads);
 
   try {
-    await Promise.all(leadIds.map(leadId => 
-      fetch(`${API_BASE}/leads/${leadId}`, { method: "DELETE" })
-    ));
+    const res = await fetch(`${API_BASE}/leads/bulk-delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_ids: leadIds })
+    });
+    if (!res.ok) throw new Error("Failed to delete selected leads");
 
     selectedCapsuleLeads.clear();
     const headerCheckbox = document.getElementById("workspace-select-all");
@@ -1418,9 +1475,12 @@ async function bulkDeleteMainLeads() {
   const leadIds = Array.from(selectedMainLeads);
 
   try {
-    await Promise.all(leadIds.map(leadId => 
-      fetch(`${API_BASE}/leads/${leadId}`, { method: "DELETE" })
-    ));
+    const res = await fetch(`${API_BASE}/leads/bulk-delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_ids: leadIds })
+    });
+    if (!res.ok) throw new Error("Failed to delete selected leads");
 
     selectedMainLeads.clear();
     const headerCheckbox = document.getElementById("leads-select-all");
@@ -1927,6 +1987,15 @@ function showSection(sectionId) {
     const el = document.getElementById(id);
     if (el) el.classList.add("hidden");
   });
+
+  const fb = document.getElementById("filters-bar");
+  if (fb) {
+    if (sectionId === "leads") {
+      fb.classList.remove("hidden");
+    } else {
+      fb.classList.add("hidden");
+    }
+  }
 
   // Deactivate all sidebar tabs
   document.querySelectorAll(".nav-item").forEach(el => el.classList.remove("active"));

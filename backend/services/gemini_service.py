@@ -216,13 +216,17 @@ def local_normalize_lead_data(raw_lead: dict) -> dict:
 def clean_indian_phone(phone_str: str) -> str:
     """Standardizes an Indian phone string.
     Removes leading country code '91' and/or leading '0', allows up to 30 digits,
-    and prepends '+91-' to the final number."""
+    and prepends '+91-' to the final number. Preserves toll-free numbers."""
     # Remove all non-digit characters
     digits = re.sub(r"\D", "", phone_str)
     
     if not digits:
         return phone_str
         
+    # Check if it is a toll-free number
+    if re.match(r"^(1800|1860|1600)", digits):
+        return digits
+
     # Strip any leading zeros
     digits = digits.lstrip("0")
         

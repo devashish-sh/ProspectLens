@@ -438,6 +438,13 @@ def merge_queue_lead_data(job_id: str, lead_id: str, payload: LeadMergePayload, 
         
     import json
     
+    print("BEFORE MERGE:")
+    print(json.dumps({
+        "address": lead.address or "—",
+        "phone": lead.primary_phone or "—",
+        "website": lead.website or "—"
+    }, indent=2))
+    
     # 1. Update standard fields
     for field in ["website", "website_domain", "primary_phone", "secondary_phones", 
                   "primary_email", "address", "city", "state", "postal_code",
@@ -549,6 +556,14 @@ def merge_queue_lead_data(job_id: str, lead_id: str, payload: LeadMergePayload, 
         session.add(q_item)
         
     session.commit()
+    
+    print("AFTER MERGE:")
+    print(json.dumps({
+        "address": lead.address or "—",
+        "phone": lead.primary_phone or "—",
+        "website": lead.website or "—"
+    }, indent=2))
+    
     return {"status": "ok", "lead": lead}
 
 @router.get("/collection-jobs/{job_id}/validation")

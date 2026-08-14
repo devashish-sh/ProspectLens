@@ -9,6 +9,7 @@ class ExtractionPipeline {
   }
   
   async run(adapter, batchId, mode) {
+    this.mode = mode;
     Logger.log(`Smart Quick Collect started. Selected adapter: ${adapter.constructor.name}`);
     StateManager.setState(StateManager.states.RUNNING);
     this.queueManager.reset();
@@ -220,13 +221,10 @@ class ExtractionPipeline {
     const isStopped = (StateManager.getState() === StateManager.states.STOPPING || StateManager.getState() === StateManager.states.STOPPED);
     if (isStopped) {
       StateManager.setState(StateManager.states.STOPPED);
-      this.progressManager.sendComplete(batchId);
-      try {
-        await Messaging.updateJobStatus(batchId, "cancelled");
-      } catch (err) {}
+      this.progressManager.sendComplete(batchId, true, this.mode);
     } else {
       StateManager.setState(StateManager.states.COMPLETED);
-      this.progressManager.sendComplete(batchId);
+      this.progressManager.sendComplete(batchId, false, this.mode);
     }
   }
 
@@ -315,44 +313,82 @@ class ExtractionPipeline {
           cardEl.scrollIntoView({ block: "center" });
           await DOMHelpers.sleep(800);
           
-          // Click the card
-          const clickTarget = cardEl.querySelector("a") || cardEl;
+          // Click the card details link (prioritize main card anchor and title heading to open panel)
+          const clickTarget = (adapter.siteKey === "googlemaps")
+            ? (cardEl.querySelector("a.hfpxzc") || cardEl.querySelector(".qBF1Pd") || cardEl.querySelector("a") || cardEl)
+            : (cardEl.querySelector("a") || cardEl);
+
+          // Dispatch complete mouse click sequence (mousedown -> mouseup -> click) to satisfy SPA listeners
+          clickTarget.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+          clickTarget.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
           if (typeof clickTarget.click === "function") {
             clickTarget.click();
           } else {
-            const event = new MouseEvent("click", {
-              bubbles: true,
-              cancelable: true,
-              view: window
-            });
-            clickTarget.dispatchEvent(event);
+            clickTarget.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
           }
 
           // Wait for business detail panel to load and stabilize
           const panelSelector = adapter.siteKey === "googlemaps" ? "div[role='main']" : ".store-detail";
-          const isLoaded = await this.waitPageStable(panelSelector, 12000);
-          
-          const panelEl = document.querySelector(panelSelector);
+          const isLoaded = await this.waitPageStable(panelSelector, 6000, item.business_name);
           if (!isLoaded) {
-            // Fallback: Proceed if panel exists and contains text content, even if it didn't stabilize in time
-            if (!panelEl || panelEl.textContent.trim().length < 50) {
-              throw new Error("Detail panel failed to load or stabilize within timeout");
-            }
-            Logger.warn("Detail panel did not fully stabilize, but content is present. Proceeding with extraction...");
+            throw new Error(`Details panel failed to load/stabilize for expected business: "${item.business_name}"`);
           }
+          
+          console.log(`[DEEP ITEM START]
+Lead ID: ${item.lead_id}
+Expected business: ${item.business_name}`);
 
+          let panelEl = document.querySelector(panelSelector);
+          if (adapter.siteKey === "googlemaps") {
+            const panels = document.querySelectorAll("div[role='main']");
+            for (const p of panels) {
+              if (!p.querySelector(".Nv2PK")) {
+                panelEl = p;
+                break;
+              }
+            }
+          }
           if (!panelEl) {
             throw new Error("Detail panel DOM element not found");
+          }
+
+          const panelTitle = panelEl.querySelector("h1")?.textContent?.trim() || "";
+          console.log(`[DETAIL PANEL]
+Detected business: ${panelTitle}`);
+
+          if (!this.isTitleMatching(panelTitle, item.business_name)) {
+            throw new Error(`Detail panel title mismatch. Expected: "${item.business_name}", Got: "${panelTitle}"`);
+          }
+
+          // Wait for secondary details to stabilize in the panel
+          if (adapter.siteKey === "googlemaps") {
+            const detailsLoaded = await this.waitDetailsLoaded(panelEl, 3000);
+            console.log(`[ProspectLens] Details loaded status: ${detailsLoaded}`);
           }
 
           // Extract detailed listing data
           const deepData = adapter.extractDeepLead(panelEl);
           
+          console.log(`[EXTRACTION]
+Address: ${deepData.address || "—"}
+Phone: ${deepData.primary_phone || "—"}
+Website: ${deepData.website || "—"}`);
+
+          console.log("[EXTRACTION OBJECT]", JSON.stringify(deepData, null, 2));
+
           // Merge with existing snapshot lead in DB
           const mergeRes = await Messaging.mergeLeadData(batchId, item.lead_id, deepData);
           if (mergeRes.status !== "ok") {
             throw new Error(`Merge request failed: ${mergeRes.message}`);
           }
+
+          console.log(`[MERGE]
+Lead ID: ${item.lead_id}
+Merged address: ${mergeRes.lead?.address || "—"}
+Merged phone: ${mergeRes.lead?.primary_phone || "—"}
+Merged website: ${mergeRes.lead?.website || "—"}`);
+
+          console.log("[DEEP ITEM COMPLETE]");
 
           success = true;
           completedCount++;
@@ -397,6 +433,36 @@ class ExtractionPipeline {
   }
 
   findCardEl(businessName, listingUrl) {
+    // 1. Try to find card inside .Nv2PK elements by listing URL
+    if (listingUrl) {
+      const cards = document.querySelectorAll(".Nv2PK");
+      for (const card of cards) {
+        const links = card.querySelectorAll("a");
+        for (const link of links) {
+          const href = link.getAttribute("href") || "";
+          if (href && (href.includes(listingUrl) || listingUrl.includes(href))) {
+            return card;
+          }
+        }
+      }
+    }
+
+    // 2. Try to find card inside .Nv2PK elements by business name matching
+    if (businessName) {
+      const targetName = businessName.toLowerCase().trim();
+      const cards = document.querySelectorAll(".Nv2PK");
+      for (const card of cards) {
+        const textElements = card.querySelectorAll("span, div, a");
+        for (const el of textElements) {
+          const text = el.textContent?.trim() || "";
+          if (text && text.toLowerCase().trim() === targetName) {
+            return card;
+          }
+        }
+      }
+    }
+
+    // Fallback search (restrict to .store-name or similar if available, else link/text)
     if (listingUrl) {
       const links = document.querySelectorAll("a");
       for (const link of links) {
@@ -406,47 +472,225 @@ class ExtractionPipeline {
         }
       }
     }
-    const spans = document.querySelectorAll("span, div, a");
-    const targetName = businessName.toLowerCase().trim();
-    for (const el of spans) {
-      const text = el.textContent?.trim() || "";
-      if (text && text.toLowerCase().trim() === targetName) {
-        return el.closest(".Nv2PK") || el.closest(".store-name") || el;
+    if (businessName) {
+      const spans = document.querySelectorAll("span, div, a");
+      const targetName = businessName.toLowerCase().trim();
+      for (const el of spans) {
+        const text = el.textContent?.trim() || "";
+        if (text && text.toLowerCase().trim() === targetName) {
+          // Avoid returning elements from the detail panel
+          if (el.closest("div[role='main']")) continue;
+          return el.closest(".Nv2PK") || el.closest(".store-name") || el;
+        }
       }
     }
     return null;
   }
 
-  async waitPageStable(selector, timeoutMs = 12000) {
-    return new Promise((resolve) => {
-      let lastHTML = "";
-      let stableTicks = 0;
-      const interval = 100;
-      let elapsed = 0;
+  isTitleMatching(actual, expected) {
+    if (!actual || !expected) return false;
+    
+    const normalize = (str) => {
+      return str
+        .toLowerCase()
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    };
 
-      const timer = setInterval(() => {
-        elapsed += interval;
-        const el = document.querySelector(selector);
-        if (el) {
-          const currentHTML = el.innerHTML;
-          // Check if HTML is stable and has loaded content
-          if (currentHTML === lastHTML && currentHTML.length > 300) {
-            stableTicks++;
-            if (stableTicks >= 4) { // stable for 400ms
-              clearInterval(timer);
-              resolve(true);
+    const normActual = normalize(actual);
+    const normExpected = normalize(expected);
+
+    if (!normActual || !normExpected) return false;
+
+    // Direct match
+    if (normActual.includes(normExpected) || normExpected.includes(normActual)) {
+      return true;
+    }
+
+    // Token overlap match (excluding generic words)
+    const genericWords = new Set(["school", "cafe", "hotel", "restaurant", "pvt", "ltd", "company", "store", "shop", "association", "club", "academy", "institute", "hospital", "clinic", "office", "agency", "center", "centre", "mall", "plaza", "bazaar", "market", "industries", "industry", "limited", "private", "enterprise", "enterprises", "services", "solutions", "group", "trust", "foundation", "society"]);
+    
+    const getSignificantTokens = (str) => {
+      return str.split(/\s+/).filter(word => word.length > 2 && !genericWords.has(word));
+    };
+
+    const actTokens = getSignificantTokens(normActual);
+    const expTokens = getSignificantTokens(normExpected);
+
+    if (actTokens.length > 0 && expTokens.length > 0) {
+      const matches = actTokens.filter(t => expTokens.includes(t));
+      if (matches.length > 0) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  async waitDetailsLoaded(panelEl, timeoutMs = 1200, quietMs = 250) {
+    const startTime = Date.now();
+    console.debug(`[ProspectLens Debug] waitDetailsLoaded started at ${startTime}`);
+    
+    let foundAddress = false;
+    let foundPhone = false;
+    let foundWebsite = false;
+
+    return new Promise((resolve) => {
+      let settleTimer = null;
+      const overallTimer = setTimeout(() => {
+        clearTimeout(settleTimer);
+        observer.disconnect();
+        console.debug(`[ProspectLens Debug] waitDetailsLoaded timed out after ${Date.now() - startTime}ms`);
+        resolve(false);
+      }, timeoutMs);
+
+      const scheduleResolve = () => {
+        // Track first appearance timestamps of fields
+        const now = Date.now();
+        const hasAddress = panelEl.querySelector("[data-item-id*='address'], [data-item-id='address']");
+        const hasPhone = panelEl.querySelector("[data-item-id*='phone']");
+        const hasWebsite = panelEl.querySelector("[data-item-id='authority']");
+
+        if (hasAddress && !foundAddress) {
+          foundAddress = true;
+          console.debug(`[ProspectLens Debug] Address node first detected after ${now - startTime}ms`);
+        }
+        if (hasPhone && !foundPhone) {
+          foundPhone = true;
+          console.debug(`[ProspectLens Debug] Phone node first detected after ${now - startTime}ms`);
+        }
+        if (hasWebsite && !foundWebsite) {
+          foundWebsite = true;
+          console.debug(`[ProspectLens Debug] Website node first detected after ${now - startTime}ms`);
+        }
+
+        clearTimeout(settleTimer);
+        settleTimer = setTimeout(() => {
+          clearTimeout(overallTimer);
+          observer.disconnect();
+          console.debug(`[ProspectLens Debug] waitDetailsLoaded settled/resolved after ${Date.now() - startTime}ms`);
+          resolve(true);
+        }, quietMs);
+      };
+
+      const observer = new MutationObserver(scheduleResolve);
+      observer.observe(panelEl, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["href"],
+        characterData: true
+      });
+
+      // Start the quiet-timer immediately in case the panel is already fully loaded
+      scheduleResolve();
+    });
+  }
+
+  async waitPageStable(selector, timeoutMs = 6000, targetTitle = null) {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      let observer = null;
+      let timeoutId = null;
+      let stabilityTimer = null;
+      let isObservingPanel = false;
+
+      const cleanUp = () => {
+        if (observer) {
+          observer.disconnect();
+          observer = null;
+        }
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        if (stabilityTimer) {
+          clearTimeout(stabilityTimer);
+          stabilityTimer = null;
+        }
+      };
+
+      const checkPanelAndStabilize = () => {
+        let el = document.querySelector(selector);
+        if (selector === "div[role='main']") {
+          const panels = document.querySelectorAll("div[role='main']");
+          for (const p of panels) {
+            if (!p.querySelector(".Nv2PK")) {
+              el = p;
+              break;
             }
-          } else {
-            stableTicks = 0;
-            lastHTML = currentHTML;
           }
         }
-        
-        if (elapsed >= timeoutMs) {
-          clearInterval(timer);
-          resolve(false);
+        if (!el) return;
+
+        // Verify title matches if expected
+        if (targetTitle) {
+          const h1 = el.querySelector("h1");
+          const h1Text = h1 ? h1.textContent.trim() : "";
+          if (!this.isTitleMatching(h1Text, targetTitle)) {
+            // Wait for next mutation to match title
+            return;
+          }
         }
-      }, interval);
+
+        // Re-target observer to panel element once it exists
+        if (observer && !isObservingPanel) {
+          try {
+            observer.disconnect();
+            observer.observe(el, {
+              childList: true,
+              subtree: true,
+              attributes: false,
+              characterData: true
+            });
+            isObservingPanel = true;
+            console.debug("[ProspectLens Debug] waitPageStable re-targeted observer to panel element");
+          } catch (err) {
+            console.debug("[ProspectLens Debug] Failed to re-target observer:", err);
+          }
+        }
+
+        // Reset stability timer on each mutation/check
+        if (stabilityTimer) {
+          clearTimeout(stabilityTimer);
+        }
+        stabilityTimer = setTimeout(() => {
+          cleanUp();
+          resolve(true); // Stable for 400ms!
+        }, 400);
+      };
+
+      // Set timeout fallback
+      timeoutId = setTimeout(() => {
+        cleanUp();
+        let el = document.querySelector(selector);
+        if (selector === "div[role='main']") {
+          el = null;
+          const panels = document.querySelectorAll("div[role='main']");
+          for (const p of panels) {
+            if (!p.querySelector(".Nv2PK")) {
+              el = p;
+              break;
+            }
+          }
+        }
+        resolve(!!el);
+      }, timeoutMs);
+
+      // Start observing mutations in document body
+      observer = new MutationObserver(() => {
+        checkPanelAndStabilize();
+      });
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: false,
+        characterData: true
+      });
+
+      // Run initial check
+      checkPanelAndStabilize();
     });
   }
 }

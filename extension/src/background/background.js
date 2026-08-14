@@ -80,10 +80,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "COLLECTION_COMPLETE") {
+    chrome.storage.local.set({
+      activeJobId: null,
+      activeJobTabId: null
+    });
+    const finalStatus = message.isCancelled ? "cancelled" : "completed";
     fetch(`${API_BASE}/batches/${message.batch_id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "completed" })
+      body: JSON.stringify({ status: finalStatus })
     })
     .then(r => r.json())
     .then(data => {
@@ -96,11 +101,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         total: batch.total_listings_found || batch.listings_processed || message.total,
         saved: batch.total_leads_stored !== undefined ? batch.total_leads_stored : batch.successful_records,
         duplicates: batch.duplicate_leads !== undefined ? batch.duplicate_leads : batch.skipped_listings,
-        failed: batch.failed_listings || message.failed || 0
+        failed: batch.failed_listings || message.failed || 0,
+        isCancelled: !!message.isCancelled,
+        mode: batch.collection_mode || message.mode || "quick"
       };
       
       // Notify popup
       chrome.runtime.sendMessage(completedMsg);
+      
+      // Trigger system notification if not manually stopped
+      if (!message.isCancelled) {
+        showCollectionNotification(message.batch_id, completedMsg);
+      }
+      
       sendResponse({ status: "ok", batch: batch });
     })
     .catch(err => {
@@ -112,9 +125,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         total: message.total,
         saved: message.saved,
         duplicates: message.duplicates,
-        failed: message.failed || 0
+        failed: message.failed || 0,
+        isCancelled: !!message.isCancelled,
+        mode: message.mode || "quick"
       };
       chrome.runtime.sendMessage(completedMsg);
+      
+      // Trigger system notification if not manually stopped
+      if (!message.isCancelled) {
+        showCollectionNotification(message.batch_id, completedMsg);
+      }
+      
       sendResponse({ status: "error", message: err.message });
     });
     return true; // Keep channel open
@@ -132,6 +153,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "CREATE_JOB") {
     // Record snapshot start time
     const jobId = message.jobId;
+    const tabId = sender.tab ? sender.tab.id : null;
+    chrome.storage.local.set({
+      activeJobId: jobId,
+      activeJobTabId: tabId
+    });
     jobTimings[jobId] = {
       snapshot_start: Date.now(),
       snapshot_time: 0,
@@ -179,6 +205,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "UPDATE_JOB_STATUS") {
+    if (["completed", "failed", "cancelled"].includes(message.status)) {
+      chrome.storage.local.set({
+        activeJobId: null,
+        activeJobTabId: null
+      });
+    }
     const jobId = message.jobId;
     let metadata = null;
     if (jobTimings[jobId]) {
@@ -277,6 +309,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // Keep channel open
   }
 
+  if (message.action === "COLLECTION_ERROR") {
+    chrome.storage.local.set({
+      activeJobId: null,
+      activeJobTabId: null
+    });
+    return false;
+  }
+
   return false;
 });
 
@@ -284,3 +324,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // REFRESH BADGE every 60 seconds
 // ============================================================
 setInterval(updateBadge, 60000);
+
+// ============================================================
+// SYSTEM NOTIFICATIONS
+// ============================================================
+const shownNotifications = new Set();
+
+function showCollectionNotification(batchId, details) {
+  if (!batchId) return;
+  if (shownNotifications.has(batchId)) {
+    console.log(`[Background] Notification already shown for job ${batchId}. Ignoring.`);
+    return;
+  }
+  shownNotifications.add(batchId);
+
+  const isDeep = details.mode === "deep";
+  const title = "ProspectLens";
+  let messageText = "";
+
+  if (isDeep) {
+    messageText = `Deep Collect Complete\n${details.total} processed • ${details.saved} enriched • ${details.failed} failed`;
+  } else {
+    messageText = `Quick Collect Complete\n${details.total} processed • ${details.saved} saved • ${details.duplicates} duplicates`;
+  }
+
+  chrome.notifications.create(batchId, {
+    type: "basic",
+    iconUrl: "icons/icon128.png",
+    title: title,
+    message: messageText,
+    priority: 2
+  }, (id) => {
+    if (chrome.runtime.lastError) {
+      console.error("[Background] Notification creation failed:", chrome.runtime.lastError);
+    } else {
+      console.log("[Background] Notification shown successfully:", id);
+    }
+  });
+}

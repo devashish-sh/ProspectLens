@@ -183,12 +183,14 @@ class GoogleMapsAdapter extends BaseAdapter {
       flexible_metadata: {}
     };
 
+    const panelText = panel.textContent || "";
+
     // 1. Description
-    const descEl = panel.querySelector(".PYv55, .WeSNe");
+    const descEl = panel.querySelector(".PYv55, .WeSNe, [class*='description']");
     if (descEl) result.flexible_metadata.description = descEl.textContent.trim();
 
     // 2. Business Hours
-    const hoursTable = panel.querySelector("table.e24EBf");
+    const hoursTable = panel.querySelector("table.e24EBf, [class*='hours'] table");
     if (hoursTable) {
       const rows = Array.from(hoursTable.querySelectorAll("tr"));
       const hoursMap = {};
@@ -200,12 +202,158 @@ class GoogleMapsAdapter extends BaseAdapter {
       result.flexible_metadata.business_hours = hoursMap;
     }
 
-    // 3. Website & Domain
+    // 3. Category (Robust detail panel category detection)
+    const categoryEl = panel.querySelector("button[class*='DkE7Z'], [class*='fontBodyMedium'][class*='R812Of']");
+    if (categoryEl) {
+      result.category = categoryEl.textContent.trim();
+    } else {
+      const ratingEl = panel.querySelector(".F7nice");
+      if (ratingEl && ratingEl.nextElementSibling) {
+        result.category = ratingEl.nextElementSibling.textContent.trim();
+      }
+    }
+
+    // 4. Address, City, State, Country, Postal Code (Robust Address Fallbacks)
+    let address = "";
+    // Scan all interactive elements inside panel for address indicators
+    const panelElements = panel.querySelectorAll("button, a, div.CsEnBe");
+    for (const el of panelElements) {
+      const itemId = el.getAttribute("data-item-id") || "";
+      const label = el.getAttribute("aria-label") || "";
+      const text = el.textContent?.trim() || "";
+      
+      if (itemId === "address" || itemId.includes("address")) {
+        const io = el.querySelector(".Io6YTe")?.textContent?.trim() || text;
+        if (io) { address = io; break; }
+      }
+      
+      if (label && /address:/i.test(label)) {
+        address = label.replace(/address:/i, "").trim();
+        break;
+      }
+      
+      // If the text contains a 6-digit PIN code (India) and is short enough
+      if (/\b[1-9][0-9]{5}\b/.test(text) && text.length < 150) {
+        if (!text.includes("+91") && !text.includes("tel:") && !text.includes("http") && !text.includes("reviews") && !text.includes("stars")) {
+          address = text;
+          break;
+        }
+      }
+    }
+
+    // Direct element fallbacks if list scanner missed it
+    if (!address) {
+      const addrEl = panel.querySelector("[data-item-id*='address'], [data-item-id='address']");
+      if (addrEl) {
+        address = addrEl.querySelector(".Io6YTe")?.textContent?.trim() || addrEl.textContent?.trim();
+      }
+    }
+    if (!address) {
+      const addrButton = panel.querySelector("button[aria-label*='Address:'], button[aria-label*='address:'], a[aria-label*='Address:'], a[aria-label*='address:']");
+      if (addrButton) {
+        const label = addrButton.getAttribute("aria-label");
+        const match = label.match(/Address:\s*(.*)/i);
+        address = match ? match[1].trim() : addrButton.textContent.trim();
+      }
+    }
+
+    if (address) {
+      result.address = address;
+      const pinMatch = address.match(/\b([1-9][0-9]{5})\b/);
+      if (pinMatch) {
+        result.postal_code = pinMatch[1];
+      }
+
+      const parts = address.split(",").map(p => p.trim());
+      if (parts.length >= 2) {
+        const statePart = parts[parts.length - 1];
+        const cityPart = parts[parts.length - 2];
+        result.city = cityPart.replace(/\d+/g, "").trim();
+        result.state = statePart.replace(/\d+/g, "").trim();
+      }
+    }
+
+    console.debug("[ProspectLens Debug] Address element details:", { 
+      timestamp: Date.now(),
+      addressEl: panel.querySelector("[data-item-id*='address'], [data-item-id='address']"), 
+      extracted: address 
+    });
+
+    // 5. Phone numbers & Alternate phones (Robust Phone Fallbacks)
+    let phone = "";
+    const telLink = panel.querySelector("a[href^='tel:']");
+    if (telLink) {
+      phone = telLink.getAttribute("href").replace("tel:", "").trim();
+    }
+    if (!phone) {
+      const phoneEl = panel.querySelector("[data-item-id*='phone']");
+      if (phoneEl) {
+        phone = phoneEl.querySelector(".Io6YTe")?.textContent?.trim() || phoneEl.textContent?.trim();
+      }
+    }
+    if (!phone) {
+      const phoneButton = panel.querySelector("button[aria-label*='Phone:'], button[aria-label*='phone:'], a[aria-label*='Phone:'], a[aria-label*='phone:']");
+      if (phoneButton) {
+        const label = phoneButton.getAttribute("aria-label");
+        const match = label.match(/Phone:\s*(.*)/i);
+        phone = match ? match[1].trim() : phoneButton.textContent.trim();
+      }
+    }
+    if (!phone) {
+      const phoneRegex = /\b(?:\+?91|0)?[-\s]?[6-9]\d{2,4}[-\s]?\d{2,4}[-\s]?\d{3,5}\b|\b0\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}\b|\b1800[-\s]?\d{3,4}[-\s]?\d{3,4}\b/;
+      const match = panelText.match(phoneRegex);
+      if (match) {
+        phone = match[0];
+      }
+    }
+
+    if (phone) {
+      result.primary_phone = Normalizer.normalizeIndianPhone(phone);
+    }
+
+    const phoneRegexAll = /\b(?:\+?91|0)?[-\s]?[6-9]\d{2,4}[-\s]?\d{2,4}[-\s]?\d{3,5}\b|\b0\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}\b|\b1800[-\s]?\d{3,4}[-\s]?\d{3,4}\b/g;
+    const allPhones = panelText.match(phoneRegexAll);
+    if (allPhones && allPhones.length > 0) {
+      const normalizedList = allPhones.map(p => Normalizer.normalizeIndianPhone(p)).filter(p => p !== "");
+      const uniquePhones = Array.from(new Set(normalizedList));
+      const primaryNorm = result.primary_phone || "";
+      const alternates = uniquePhones.filter(p => p !== primaryNorm);
+      if (alternates.length > 0) {
+        result.secondary_phones = alternates.slice(0, 3).join(", ");
+      }
+    }
+
+    // 6. Website & Domain (Robust Website Fallbacks)
+    let website = "";
     const webEl = panel.querySelector("[data-item-id='authority']");
     if (webEl) {
-      const url = webEl.querySelector("a")?.getAttribute("href") || webEl.textContent?.trim();
-      if (url) {
-        const cleanUrl = Normalizer.cleanWebsiteUrl(url);
+      website = (webEl.tagName === "A" ? webEl.getAttribute("href") : null) || 
+                webEl.querySelector("a")?.getAttribute("href") || 
+                webEl.textContent?.trim();
+    }
+    if (!website) {
+      const webButton = panel.querySelector("a[aria-label*='Website'], a[data-value*='Website']");
+      if (webButton) {
+        website = webButton.getAttribute("href") || webButton.textContent.trim();
+      }
+    }
+    if (!website) {
+      const links = panel.querySelectorAll("a");
+      for (const link of links) {
+        const href = link.getAttribute("href") || "";
+        if (href.startsWith("http") || href.includes("google.com/url") || href.includes("google.co.in/url")) {
+          const cleanUrl = Normalizer.cleanWebsiteUrl(href);
+          if (cleanUrl && !/youtube\.com|facebook\.com|instagram\.com|twitter\.com|linkedin\.com|x\.com/.test(cleanUrl)) {
+            website = cleanUrl;
+            break;
+          }
+        }
+      }
+    }
+
+    if (website) {
+      const cleanUrl = Normalizer.cleanWebsiteUrl(website);
+      if (cleanUrl) {
         result.website = cleanUrl;
         try {
           const parsed = new URL(cleanUrl);
@@ -214,36 +362,20 @@ class GoogleMapsAdapter extends BaseAdapter {
       }
     }
 
-    // 3.5 Regex heuristics from panel text content (Emails & Alt Phones)
-    const panelText = panel.textContent || "";
+    console.debug("[ProspectLens Debug] Website element details:", { 
+      timestamp: Date.now(),
+      webEl: panel.querySelector("[data-item-id='authority']"), 
+      extracted: website 
+    });
+
+    // 6.5 Email heuristic fallback
     const emails = panelText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b/g);
     if (emails && emails.length > 0) {
       result.primary_email = emails[0];
     }
 
-    // 4. Phone numbers
-    const phoneEl = panel.querySelector("[data-item-id*='phone']");
-    if (phoneEl) {
-      const phoneText = phoneEl.querySelector(".Io6YTe")?.textContent?.trim();
-      if (phoneText) {
-        result.primary_phone = phoneText;
-      }
-    }
-
-    // 4.5 Extract alternate phone numbers using a standard regex fallback
-    const phoneRegex = /\b(?:(?:\+|0{0,2})91[\s\-]*)?[6-9]\d{9}\b/g;
-    const phones = panelText.match(phoneRegex);
-    if (phones && phones.length > 0) {
-      const uniquePhones = Array.from(new Set(phones.map(p => p.trim())));
-      const primaryDigits = result.primary_phone ? result.primary_phone.replace(/\D/g, "") : "";
-      const alternates = uniquePhones.filter(p => p.replace(/\D/g, "") !== primaryDigits);
-      if (alternates.length > 0) {
-        result.secondary_phones = alternates.slice(0, 3).join(", ");
-      }
-    }
-
-    // 5. Links (Reservation, Booking, Menu, Directions, Socials)
-    const reservEl = panel.querySelector("[data-item-id='action:1'], [data-item-id='reservations']");
+    // 7. Links (Reservation, Booking, Menu, Directions, Socials)
+    const reservEl = panel.querySelector("[data-item-id='action:1'], [data-item-id='reservations'], a[href*='reserve'], a[href*='booking']");
     if (reservEl) result.flexible_metadata.reservation_link = reservEl.querySelector("a")?.getAttribute("href") || reservEl.getAttribute("href") || null;
 
     const bookingEl = panel.querySelector("[data-item-id='action:2'], [data-item-id='booking']");
@@ -266,7 +398,7 @@ class GoogleMapsAdapter extends BaseAdapter {
       result.flexible_metadata.social_links = socialLinks;
     }
 
-    // 6. Coordinates (from page URL)
+    // 8. Coordinates
     const url_href = window.location.href;
     const coordMatch = url_href.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (coordMatch) {
@@ -274,11 +406,11 @@ class GoogleMapsAdapter extends BaseAdapter {
       result.flexible_metadata.longitude = parseFloat(coordMatch[2]);
     }
 
-    // 7. Plus Code
+    // 9. Plus Code
     const plusEl = panel.querySelector("[data-item-id='oloc']");
     if (plusEl) result.flexible_metadata.plus_code = plusEl.querySelector(".Io6YTe")?.textContent?.trim() || null;
 
-    // 8. Attributes / Amenities / Accessibility
+    // 10. Attributes / Amenities / Accessibility
     const attrRows = panel.querySelectorAll(".fontBodyMedium");
     const amenities = [];
     attrRows.forEach(row => {
@@ -307,13 +439,13 @@ class GoogleMapsAdapter extends BaseAdapter {
       result.flexible_metadata.accessibility_features = accessibility;
     }
 
-    // 9. Popular times
+    // 11. Popular times
     const popEl = panel.querySelector("[aria-label*='Popular times'], [aria-label*='busy']");
     if (popEl) {
       result.flexible_metadata.popular_times = popEl.getAttribute("aria-label") || popEl.textContent?.trim();
     }
 
-    // 10. Photos
+    // 12. Photos
     const photoBtns = panel.querySelectorAll("button[aria-label*='Photo'], button[aria-label*='Image']");
     const photoUrls = [];
     photoBtns.forEach(btn => {
@@ -322,24 +454,24 @@ class GoogleMapsAdapter extends BaseAdapter {
     });
     if (photoUrls.length > 0) result.flexible_metadata.photo_urls = photoUrls;
 
-    // 11. Owner Information (Claimed vs Unclaimed)
+    // 13. Owner claimed
     const unclaimed = panelText.includes("Claim this business");
     result.flexible_metadata.owner_claimed = !unclaimed;
 
-    // 12. Hotel Prices (If hotel)
+    // 14. Hotel Prices
     const hotelPriceMatch = panelText.match(/(?:Rs\.?|INR|₹|\$)\s*\d+(?:,\d+)*(?:\.\d+)?/g);
     if (hotelPriceMatch && (panelText.toLowerCase().includes("hotel") || panelText.toLowerCase().includes("stay"))) {
       result.flexible_metadata.hotel_prices = Array.from(new Set(hotelPriceMatch));
     }
 
-    // 13. Price Level
+    // 15. Price Level
     const priceLevelEl = panel.querySelector(".fontBodyMedium");
     const priceLevelMatch = priceLevelEl?.textContent?.match(/([$₹€£]+)/);
     if (priceLevelMatch) {
       result.price_level = priceLevelMatch[1];
     }
 
-    // 14. Business Status
+    // 16. Business Status
     if (panelText.includes("Temporarily closed")) {
       result.flexible_metadata.business_status = "Temporarily Closed";
     } else if (panelText.includes("Permanently closed")) {
@@ -348,7 +480,7 @@ class GoogleMapsAdapter extends BaseAdapter {
       result.flexible_metadata.business_status = "Active";
     }
 
-    // 15. Rating & Reviews fallback
+    // 17. Rating & Reviews
     const ratingEl = panel.querySelector(".F7nice");
     if (ratingEl) {
       const ratingText = ratingEl.querySelector("span[aria-hidden='true']")?.textContent?.trim();
@@ -358,6 +490,35 @@ class GoogleMapsAdapter extends BaseAdapter {
         const count = parseInt(reviewsText.replace(/\D/g, ""));
         if (!isNaN(count)) result.review_count = count;
       }
+    }
+
+    // Format Contacts Array
+    const contacts = [];
+    if (result.primary_phone) {
+      contacts.push({ contact_type: "phone", contact_value: result.primary_phone, sequence_number: 1, source: "deep_collect" });
+    }
+    if (result.primary_email) {
+      contacts.push({ contact_type: "email", contact_value: result.primary_email, sequence_number: 1, source: "deep_collect" });
+    }
+    if (result.secondary_phones) {
+      const secPhones = result.secondary_phones.split(",").map(p => p.trim());
+      secPhones.forEach((p, index) => {
+        contacts.push({ contact_type: "phone", contact_value: p, sequence_number: index + 2, source: "deep_collect" });
+      });
+    }
+    if (result.flexible_metadata.social_links) {
+      result.flexible_metadata.social_links.forEach(link => {
+        let type = "social";
+        if (link.includes("facebook")) type = "facebook";
+        else if (link.includes("instagram")) type = "instagram";
+        else if (link.includes("linkedin")) type = "linkedin";
+        else if (link.includes("twitter") || link.includes("x.com")) type = "twitter";
+        else if (link.includes("youtube")) type = "youtube";
+        contacts.push({ contact_type: type, contact_value: link, sequence_number: 1, source: "deep_collect" });
+      });
+    }
+    if (contacts.length > 0) {
+      result.contacts = contacts;
     }
 
     return result;

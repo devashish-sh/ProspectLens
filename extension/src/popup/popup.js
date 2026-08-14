@@ -393,11 +393,17 @@ async function startCollection(site) {
     const batchData = await batchRes.json();
     const batchId   = batchData.batch_id || jobId;
 
+    // Save active job tracking details to local storage
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    chrome.storage.local.set({
+      activeJobId: batchId,
+      activeJobTabId: tab ? tab.id : null
+    });
+
     progressFill.style.width = "15%";
     progressText.textContent = "Batch created — injecting collector...";
 
     // Step 2 — Send message to content script
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     chrome.tabs.sendMessage(tab.id, {
       action:   "START_COLLECTION",
@@ -608,6 +614,10 @@ async function init() {
   if (btnStop) {
     btnStop.addEventListener("click", () => {
       sendCommand("STOP_COLLECTION");
+      chrome.storage.local.set({
+        activeJobId: null,
+        activeJobTabId: null
+      });
     });
   }
 
@@ -642,12 +652,16 @@ async function init() {
 
     if (msg.action === "COLLECTION_COMPLETE") {
       setCollectionState("completed");
+      chrome.storage.local.set({
+        activeJobId: null,
+        activeJobTabId: null
+      });
 
       loadStats();
       loadRecentBatches();
       broadcastStateUpdate();
       
-      if (currentMode === "deep") {
+      if (currentMode === "deep" && !msg.isCancelled) {
         fetch(`${API_BASE}/jobs`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -669,6 +683,10 @@ async function init() {
       const progressText = document.getElementById("progress-text");
       if (progressText) progressText.textContent = `❌ Error: ${msg.message}`;
       setCollectionState("idle");
+      chrome.storage.local.set({
+        activeJobId: null,
+        activeJobTabId: null
+      });
     }
   });
 

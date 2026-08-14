@@ -28,16 +28,17 @@ const Messaging = {
     chrome.runtime.sendMessage({ action: "COLLECTION_PROGRESS", done, total, saved, duplicates, failed, status });
   },
   
-  sendComplete(batchId, total, saved, duplicates, failed) {
+  sendComplete(batchId, total, saved, duplicates, failed, isCancelled = false, mode = "quick") {
     chrome.storage.local.set({
       collectionProgress: {
-        state: "Completed",
+        state: isCancelled ? "Stopped" : "Completed",
         current: total,
         total,
         saved,
         duplicates,
         failed,
-        status: "Collection Complete"
+        status: isCancelled ? "Collection Stopped" : "Collection Complete",
+        mode: mode
       }
     });
     chrome.runtime.sendMessage({
@@ -46,7 +47,9 @@ const Messaging = {
       total: total,
       saved: saved,
       duplicates: duplicates,
-      failed: failed
+      failed: failed,
+      isCancelled: isCancelled,
+      mode: mode
     });
   },
   

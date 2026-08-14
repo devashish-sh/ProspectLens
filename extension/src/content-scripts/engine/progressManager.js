@@ -51,10 +51,10 @@ class ProgressManager {
     }
   }
   
-  sendComplete(batchId) {
-    Messaging.sendComplete(batchId, this.total, this.saved, this.duplicates, this.failed);
+  sendComplete(batchId, isCancelled = false, mode = "quick") {
+    Messaging.sendComplete(batchId, this.total, this.saved, this.duplicates, this.failed, isCancelled, mode);
     if (batchId) {
-      Messaging.updateJobStatus(batchId, "completed");
+      Messaging.updateJobStatus(batchId, isCancelled ? "cancelled" : "completed");
     }
   }
 }

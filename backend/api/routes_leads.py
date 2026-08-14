@@ -340,6 +340,49 @@ def delete_lead(lead_id: str, session: Session = Depends(get_session)):
     }
 
 
+class BulkDeleteRequest(BaseModel):
+    lead_ids: list[str]
+
+@router.post("/leads/bulk-delete")
+def bulk_delete_leads(req: BulkDeleteRequest, session: Session = Depends(get_session)):
+    """Deletes multiple leads and all their associated data in a single transaction."""
+    lead_ids = req.lead_ids
+    if not lead_ids:
+        return {"status": "ok", "message": "No leads specified", "count": 0}
+
+    # Bulk delete associated data to maintain database consistency and prevent orphan rows
+    session.exec(delete(Contact).where(Contact.lead_id.in_(lead_ids)))
+    session.exec(delete(SourceRecord).where(SourceRecord.lead_id.in_(lead_ids)))
+    session.exec(delete(Note).where(Note.lead_id.in_(lead_ids)))
+    session.exec(delete(LeadHistory).where(LeadHistory.lead_id.in_(lead_ids)))
+    session.exec(delete(LeadVersionHistory).where(LeadVersionHistory.lead_id.in_(lead_ids)))
+    session.exec(delete(LeadTag).where(LeadTag.lead_id.in_(lead_ids)))
+    session.exec(delete(CollectionError).where(CollectionError.lead_id.in_(lead_ids)))
+
+    # Delete leads themselves
+    session.exec(delete(Lead).where(Lead.lead_id.in_(lead_ids)))
+    session.commit()
+
+    # Publish events
+    for lid in lead_ids:
+        try:
+            event_bus.EventBus.publish(event_bus.LEAD_DELETED, lead_id=lid)
+        except Exception as e:
+            print(f"[BulkDelete] Failed to publish event for {lid}: {e}")
+
+    # Broadcast state updated once for the whole batch
+    SyncBroadcaster.broadcast("STATE_UPDATED", {
+        "action": "LEADS_BULK_DELETED",
+        "lead_ids": lead_ids
+    })
+
+    return {
+        "status": "ok",
+        "message": f"Successfully deleted {len(lead_ids)} leads",
+        "count": len(lead_ids)
+    }
+
+
 # ==============================================================================
 # EDIT & PROMOTE ENDPOINTS
 # ==============================================================================

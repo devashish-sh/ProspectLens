@@ -302,8 +302,9 @@
             <div>Retries: <strong id="active-job-retries-q" style="color: #fbbf24;">0</strong></div>
           </div>
         </div>
-        <div id="no-active-job-placeholder" style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px; background: rgba(255,255,255,0.01); border: 1px dashed rgba(255,255,255,0.1); border-radius: 6px; margin-bottom: 20px;">
-          No active collection job running. Start a collection from the extension popup.
+        <div id="no-active-job-placeholder" style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px; background: rgba(255,255,255,0.01); border: 1px dashed rgba(255,255,255,0.1); border-radius: 6px; margin-bottom: 20px;">
+          <div style="font-weight: 700; color: var(--text); margin-bottom: 4px;">No active collection</div>
+          <div style="font-size: 11px;">Start a Quick Collect or Deep Collect session to see live progress.</div>
         </div>
 
         <!-- Recent Jobs List -->
@@ -315,7 +316,7 @@
     </div>
 
     <!-- FILTERS -->
-    <div class="filters" id="filters-bar">
+    <div class="filters hidden" id="filters-bar">
       <input class="f-input" id="filter-search" type="text" placeholder="Search business..." />
       <select class="f-select" id="filter-source">
         <option value="">All Sources</option>
@@ -377,7 +378,7 @@
           </tr>
         </thead>
         <tbody id="leads-tbody">
-          <tr><td colspan="9" class="tbl-empty">Loading leads...</td></tr>
+          <tr><td colspan="11" class="tbl-empty">Loading leads...</td></tr>
         </tbody>
       </table>
       <div class="pager" id="pagination">
@@ -389,7 +390,7 @@
 
     <!-- COLLECTIONS TABLE -->
     <!-- COLLECTIONS WORKSPACE (DATA CAPSULES) -->
-    <div class="tbl-wrap hidden" id="batches-section" style="width: 100%;">
+    <div class="hidden" id="batches-section" style="width: 100%;">
       
       <!-- 1. CAPSULES LIST GRID VIEW -->
       <div id="capsules-grid-view" style="width: 100%;">
@@ -484,7 +485,7 @@
 
     <!-- SETTINGS PANEL -->
     <div class="hidden" id="settings-section">
-      <div style="display: flex; flex-direction: column; gap: 24px; max-width: 800px; margin: 0 auto; padding: 10px 0;">
+      <div style="display: flex; flex-direction: column; gap: 24px; width: 100%; padding: 10px 0;">
         
         <!-- General Section -->
         <div class="settings-section" style="border: 1px solid #222; border-radius: 8px; background: #0a0a0a; padding: 16px;">
