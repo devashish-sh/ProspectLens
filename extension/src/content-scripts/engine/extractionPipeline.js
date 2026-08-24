@@ -7,6 +7,16 @@ class ExtractionPipeline {
     this.progressManager = new ProgressManager();
     this.scrollManager = new ScrollManager();
   }
+
+  resolveGoogleMapsPanel() {
+    const panels = document.querySelectorAll("div[role='main']");
+    for (const p of panels) {
+      if (p.hasAttribute("aria-label") && !p.querySelector("[role='feed']")) {
+        return p;
+      }
+    }
+    return null;
+  }
   
   async run(adapter, batchId, mode) {
     this.mode = mode;
@@ -338,16 +348,9 @@ class ExtractionPipeline {
 Lead ID: ${item.lead_id}
 Expected business: ${item.business_name}`);
 
-          let panelEl = document.querySelector(panelSelector);
-          if (adapter.siteKey === "googlemaps") {
-            const panels = document.querySelectorAll("div[role='main']");
-            for (const p of panels) {
-              if (!p.querySelector(".Nv2PK")) {
-                panelEl = p;
-                break;
-              }
-            }
-          }
+          let panelEl = (adapter.siteKey === "googlemaps")
+            ? this.resolveGoogleMapsPanel()
+            : document.querySelector(panelSelector);
           if (!panelEl) {
             throw new Error("Detail panel DOM element not found");
           }
@@ -612,16 +615,9 @@ Merged website: ${mergeRes.lead?.website || "—"}`);
       };
 
       const checkPanelAndStabilize = () => {
-        let el = document.querySelector(selector);
-        if (selector === "div[role='main']") {
-          const panels = document.querySelectorAll("div[role='main']");
-          for (const p of panels) {
-            if (!p.querySelector(".Nv2PK")) {
-              el = p;
-              break;
-            }
-          }
-        }
+        let el = (selector === "div[role='main']")
+          ? this.resolveGoogleMapsPanel()
+          : document.querySelector(selector);
         if (!el) return;
 
         // Verify title matches if expected
@@ -664,17 +660,9 @@ Merged website: ${mergeRes.lead?.website || "—"}`);
       // Set timeout fallback
       timeoutId = setTimeout(() => {
         cleanUp();
-        let el = document.querySelector(selector);
-        if (selector === "div[role='main']") {
-          el = null;
-          const panels = document.querySelectorAll("div[role='main']");
-          for (const p of panels) {
-            if (!p.querySelector(".Nv2PK")) {
-              el = p;
-              break;
-            }
-          }
-        }
+        let el = (selector === "div[role='main']")
+          ? this.resolveGoogleMapsPanel()
+          : document.querySelector(selector);
         resolve(!!el);
       }, timeoutMs);
 

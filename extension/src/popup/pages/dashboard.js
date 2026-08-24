@@ -199,15 +199,29 @@ async function isJobGenuinelyActive(jobId) {
     
     // Verify tab exists and is responsive to ping
     if (storage.activeJobTabId) {
-      const isTabAlive = await new Promise((resolve) => {
-        chrome.tabs.sendMessage(storage.activeJobTabId, { action: "PING" }, (res) => {
-          if (chrome.runtime.lastError) {
+      const pingTab = (tabId) => {
+        return new Promise((resolve) => {
+          const timeout = setTimeout(() => {
             resolve(false);
-          } else {
-            resolve(res && res.status === "pong");
-          }
+          }, 1000); // 1-second timeout
+          
+          chrome.tabs.sendMessage(tabId, { action: "PING" }, (res) => {
+            clearTimeout(timeout);
+            if (chrome.runtime.lastError) {
+              resolve(false);
+            } else {
+              resolve(res && res.status === "pong");
+            }
+          });
         });
-      });
+      };
+
+      // 2 attempts (initial + 1 retry) before declaring dead
+      let isTabAlive = await pingTab(storage.activeJobTabId);
+      if (!isTabAlive) {
+        await new Promise(r => setTimeout(r, 300)); // wait 300ms before retry
+        isTabAlive = await pingTab(storage.activeJobTabId);
+      }
       return isTabAlive;
     }
     
@@ -236,6 +250,18 @@ async function loadCollectionJobs() {
     if (activeData.status === "ok" && activeData.job) {
       job = activeData.job;
       showJob = await isJobGenuinelyActive(job.job_id);
+      
+      if (!showJob) {
+        // Mark the stale job as failed on the backend to maintain DB integrity
+        fetch(`${API_BASE}/collection-jobs/${job.job_id}/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "failed",
+            metadata_json: { reason: "Stale active job session cleaned up by dashboard" }
+          })
+        }).catch(err => console.warn("Failed to mark stale job as failed", err));
+      }
     }
     
     if (showJob && job) {
