@@ -89,6 +89,41 @@ def run_database_migrations(engine):
             print(f"[DB Migration] Integrity check note: {e}")
 
 
+def seed_initial_data(engine):
+    """Seeds default website sources and capsules into database if missing."""
+    from database.models import WebsiteSource, DataCapsule
+    sources_to_seed = [
+        ("googlemaps", "Google Maps", "https://www.google.com/maps", "/assets/icons/googlemaps.png", "GoogleMapsAdapter", '{"quick_collect": "supported", "deep_collect": "supported", "pagination": "supported", "infinite_scroll": "experimental", "email_extraction": "experimental", "phone_extraction": "supported", "website_extraction": "supported", "review_extraction": "supported", "coordinates": "supported", "categories": "supported", "business_hours": "supported", "social_links": "experimental", "images": "supported", "attachments": "unavailable"}', '["quick", "deep"]'),
+        ("indiamart", "IndiaMART", "https://www.indiamart.com", "/assets/icons/indiamart.png", "IndiaMartAdapter", '{"quick_collect": "supported", "deep_collect": "supported", "phone_extraction": "supported", "email_extraction": "unavailable", "attachments": "supported"}', '["quick", "deep"]'),
+        ("justdial", "Justdial", "https://www.justdial.com", "/assets/icons/justdial.png", "JustdialAdapter", '{"quick_collect": "supported", "deep_collect": "supported", "phone_extraction": "supported", "email_extraction": "experimental"}', '["quick", "deep"]'),
+        ("tradeindia", "TradeIndia", "https://www.tradeindia.com", "/assets/icons/tradeindia.png", "TradeIndiaAdapter", '{"quick_collect": "supported", "deep_collect": "supported", "phone_extraction": "supported"}', '["quick", "deep"]')
+    ]
+    with Session(engine) as session:
+        for key, display_name, base_url, icon_path, adapter_key, capabilities, collection_types in sources_to_seed:
+            existing = session.exec(select(WebsiteSource).where(WebsiteSource.source_key == key)).first()
+            if not existing:
+                src = WebsiteSource(
+                    source_key=key,
+                    display_name=display_name,
+                    base_url=base_url,
+                    icon_path=icon_path,
+                    adapter_key=adapter_key,
+                    capabilities=capabilities,
+                    collection_types=collection_types,
+                    current_health="Healthy",
+                    health_score=100
+                )
+                session.add(src)
+            # Ensure capsule exists
+            cap = session.exec(select(DataCapsule).where(DataCapsule.source_site == key)).first()
+            if not cap:
+                session.add(DataCapsule(source_site=key))
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
+
+
 def get_current_schema_version(engine) -> int:
     """Returns the highest applied schema version."""
     try:
@@ -99,3 +134,4 @@ def get_current_schema_version(engine) -> int:
             return max(v.version_id for v in versions)
     except Exception:
         return 1
+

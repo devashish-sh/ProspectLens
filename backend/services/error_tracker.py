@@ -43,6 +43,20 @@ class CollectionErrorTracker:
         """
         browser_str = json.dumps(browser_info) if browser_info else None
         
+        # Ensure parent batch exists for foreign key constraint
+        from database.models import CollectionBatch
+        batch = session.get(CollectionBatch, batch_id)
+        if not batch:
+            batch = CollectionBatch(
+                batch_id=batch_id,
+                batch_name=f"{website.title()} Error Session",
+                source_site=website,
+                collection_mode=collection_mode,
+                status="failed"
+            )
+            session.add(batch)
+            session.flush()
+
         error_record = CollectionError(
             batch_id=batch_id,
             lead_id=lead_id,
