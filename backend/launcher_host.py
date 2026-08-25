@@ -69,8 +69,16 @@ def main():
                     # Development mode: Fall back to start.bat launcher_path
                     launcher_path = msg.get("launcher_path")
                     if not launcher_path or not os.path.exists(launcher_path):
-                        send_message({"status": "error", "message": f"Backend launcher not found (Searched: {prod_engine_exe} and {launcher_path})"})
-                        continue
+                        # Fallback 1: Project root start.bat
+                        root_start_bat = current_dir.parent / "start.bat"
+                        if root_start_bat.exists():
+                            launcher_path = str(root_start_bat)
+                        # Fallback 2: Current dir start.bat
+                        elif (current_dir / "start.bat").exists():
+                            launcher_path = str(current_dir / "start.bat")
+                        else:
+                            send_message({"status": "error", "message": f"Backend launcher not found (Searched: {prod_engine_exe} and {launcher_path})"})
+                            continue
                         
                     subprocess.Popen(
                         ["cmd.exe", "/c", launcher_path],
