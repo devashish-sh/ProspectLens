@@ -41,18 +41,8 @@ class LeadComparisonProfile:
         Normalize company name to ignore suffixes, punctuation, casing, and spacing.
         e.g., 'ABC Interiors Pvt. Ltd.' -> 'abcinteriors'
         """
-        if not name:
-            return ""
-        name_lower = name.lower().strip()
-        # Remove common business suffixes to allow cleaner matching
-        suffixes = [
-            r"\bpvt\b", r"\bltd\b", r"\bprivate\b", r"\blimited\b",
-            r"\binc\b", r"\bllc\b", r"\bco\b", r"\bcorp\b", r"\bcorporation\b"
-        ]
-        for suffix in suffixes:
-            name_lower = re.sub(suffix, "", name_lower)
-        # Strip non-alphanumeric characters
-        return re.sub(r"[^a-z0-9]", "", name_lower)
+        from services.data_cleaner import normalize_name_for_comparison, clean_business_name
+        return normalize_name_for_comparison(name) or clean_business_name(name).lower()
 
     @staticmethod
     def normalize_phone(phone: str) -> str:
@@ -62,43 +52,33 @@ class LeadComparisonProfile:
         """
         if not phone:
             return ""
-        # Keep only digits
-        digits = re.sub(r"\D", "", phone)
-        # Handle country code (e.g., strip leading 91 or 0 for standard Indian numbers)
-        if len(digits) == 12 and digits.startswith("91"):
-            return digits[2:]
-        if len(digits) == 11 and digits.startswith("0"):
-            return digits[1:]
-        return digits
+        digits = re.sub(r"\D", "", str(phone))
+        digits = digits.lstrip("0")
+        if digits.startswith("91") and len(digits) > 10:
+            digits = digits[2:].lstrip("0")
+        return digits[-10:] if len(digits) >= 10 else digits
 
     @staticmethod
     def normalize_website(url: str) -> str:
         """
-        Normalize website URLs to extract the domain/hostname exactly.
-        e.g., 'https://www.abcinteriors.com/contact' -> 'abcinteriors.com'
+        Normalize website URLs to extract the canonical root domain.
+        e.g., 'https://www.abcinteriors.com/contact?utm_source=google' -> 'abcinteriors.com'
         """
-        if not url:
-            return ""
-        url_lower = url.lower().strip()
-        # Remove protocol prefixes
-        url_lower = re.sub(r"^https?://", "", url_lower)
-        # Remove www prefix
-        url_lower = re.sub(r"^www\.", "", url_lower)
-        # Split path and keep host/domain only
-        parts = url_lower.split("/")
-        return parts[0] if parts else ""
+        from services.data_cleaner import clean_website_url
+        _, clean_dom = clean_website_url(url)
+        return clean_dom or ""
 
     @staticmethod
     def normalize_location(address: str, city: str, state: str, postal_code: str) -> str:
         """
         Normalize location properties focusing on postal codes and city keys.
         """
-        postal = re.sub(r"\D", "", postal_code) if postal_code else ""
-        city_norm = re.sub(r"[^a-z0-9]", "", city.lower()) if city else ""
-        state_norm = re.sub(r"[^a-z0-9]", "", state.lower()) if state else ""
-        
-        # Combine normalized components into a composite location key
-        return f"{postal}|{city_norm}|{state_norm}"
+        from services.data_cleaner import extract_pin_code, extract_city_and_state, clean_address_text
+        pin = postal_code or extract_pin_code(address) or ""
+        c, s = extract_city_and_state(address, city_hint=city, state_hint=state)
+        c_norm = re.sub(r"[^a-z0-9]", "", (c or "").lower())
+        s_norm = re.sub(r"[^a-z0-9]", "", (s or "").lower())
+        return f"{pin}|{c_norm}|{s_norm}"
 
 
 class LeadMergeEngine:

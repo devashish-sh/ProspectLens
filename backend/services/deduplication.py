@@ -22,18 +22,14 @@ from sqlmodel import Session, select
 from database.models import Lead, VisitedURL
 
 
-def compute_dedup_hash(business_name: str, source_site: str, address: str) -> str:
+def compute_dedup_hash(business_name: str, source_site: str, address: str = "") -> str:
     """
     Compute a SHA-256 fingerprint for a lead.
-    All three inputs are lowercased and stripped before hashing
-    so 'ABC Interiors ' and 'abc interiors' produce the same hash.
+    Normalizes business name, source site, and address to prevent duplicate creations
+    caused by cosmetic formatting variations while strictly isolating source sites.
     """
-    normalized_name    = business_name.lower().strip()
-    normalized_site    = source_site.lower().strip()
-    normalized_address = address.lower().strip() if address else ""
-
-    hash_input = f"{normalized_name}|{normalized_site}|{normalized_address}"
-    return hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
+    from services.data_cleaner import compute_clean_dedup_hash
+    return compute_clean_dedup_hash(business_name=business_name, source_site=source_site, address=address)
 
 
 def is_duplicate_lead(dedup_hash: str, session: Session) -> bool:

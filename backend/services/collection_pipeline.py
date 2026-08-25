@@ -9,61 +9,69 @@ import asyncio
 from datetime import datetime
 
 def calculate_lead_completeness(lead: Lead, contacts: list) -> float:
+    """
+    Computes lead completeness percentage (0.0% to 100.0%).
+    Awards 12.5% across 8 essential dimensions, strictly verifying that
+    placeholders ('N/A', '-', 'None', 'null', '0', etc.) do not receive credit.
+    """
+    from services.data_cleaner import is_valid_text, clean_phone_number, clean_website_url
     score = 0.0
     
     # 1. Company Name
-    if lead.business_name and lead.business_name.strip():
+    if is_valid_text(lead.business_name):
         score += 12.5
         
-    # 2. Location
-    if (lead.address and lead.address.strip()) or (lead.city and lead.city.strip()) or (lead.state and lead.state.strip()) or (lead.postal_code and lead.postal_code.strip()):
+    # 2. Location (Address, City, State, or Postal Code)
+    if (is_valid_text(lead.address) or is_valid_text(lead.city) or 
+        is_valid_text(lead.state) or is_valid_text(lead.postal_code)):
         score += 12.5
         
-    # 3. Phone
+    # 3. Phone (Valid non-placeholder number)
     has_phone = False
-    if lead.primary_phone and lead.primary_phone.strip():
+    if clean_phone_number(lead.primary_phone):
         has_phone = True
     elif contacts:
         for c in contacts:
             c_type = c.contact_type if hasattr(c, "contact_type") else c.get("contact_type")
             c_val = c.contact_value if hasattr(c, "contact_value") else c.get("contact_value")
-            if c_type == "phone" and c_val and str(c_val).strip():
+            if c_type == "phone" and clean_phone_number(c_val):
                 has_phone = True
                 break
     if has_phone:
         score += 12.5
         
-    # 4. Email
+    # 4. Email (Valid format with @ and .)
     has_email = False
-    if lead.primary_email and lead.primary_email.strip():
+    if is_valid_text(lead.primary_email) and "@" in lead.primary_email and "." in lead.primary_email:
         has_email = True
     elif contacts:
         for c in contacts:
             c_type = c.contact_type if hasattr(c, "contact_type") else c.get("contact_type")
             c_val = c.contact_value if hasattr(c, "contact_value") else c.get("contact_value")
-            if c_type == "email" and c_val and str(c_val).strip():
+            if c_type == "email" and is_valid_text(c_val) and "@" in str(c_val) and "." in str(c_val):
                 has_email = True
                 break
     if has_email:
         score += 12.5
         
-    # 5. Website
-    if lead.website and lead.website.strip():
+    # 5. Website (Valid URL and domain)
+    web_clean, _ = clean_website_url(lead.website)
+    if web_clean:
         score += 12.5
         
-    # 6. Reviews
+    # 6. Reviews (Positive integer)
     if lead.review_count is not None and lead.review_count > 0:
         score += 12.5
         
-    # 7. Listing URL
-    if lead.listing_url and lead.listing_url.strip():
+    # 7. Listing URL (Valid http/https link)
+    if is_valid_text(lead.listing_url) and ("http://" in lead.listing_url or "https://" in lead.listing_url):
         score += 12.5
         
-    # 8. Rating
-    if lead.rating is not None and lead.rating > 0.0:
+    # 8. Rating (Between 1.0 and 5.0)
+    if lead.rating is not None and 1.0 <= lead.rating <= 5.0:
         score += 12.5
         
-    return min(100.0, score)
+    return round(score, 1)
 
 class CollectionPipeline:
     
@@ -175,6 +183,11 @@ class CollectionPipeline:
             if emails:
                 normalized_email = emails[0].get("contact_value")
 
+        # Clean website URL & domain
+        from services.data_cleaner import clean_website_url, is_valid_text, clean_phone_number
+        clean_web, clean_dom = clean_website_url(lead_data.get("website"))
+        web_domain = lead_data.get("website_domain") or clean_dom
+
         # Step 4: Create Lead record (forcing is_approved=False and lead_status="retrieved")
         lead = Lead(
             batch_id=lead_data.get("batch_id"),
@@ -183,7 +196,7 @@ class CollectionPipeline:
             business_name=biz_name,
             service_name=lead_data.get("service_name"),
             contact_person=person_val,
-            website=lead_data.get("website"),
+            website=clean_web,
             address=addr,
             city=city_val,
             state=state_val,
@@ -213,7 +226,7 @@ class CollectionPipeline:
             search_location=lead_data.get("search_location"),
             collection_date=lead_data.get("collection_date"),
             collection_time=lead_data.get("collection_time"),
-            website_domain=lead_data.get("website_domain"),
+            website_domain=web_domain,
             open_status=lead_data.get("open_status"),
             displayed_price=lead_data.get("displayed_price"),
             price_currency=lead_data.get("price_currency"),
@@ -253,16 +266,22 @@ class CollectionPipeline:
         session.flush()
         print(f"[DEBUG_AUDIT] Lead ID: '{lead.business_name}' | Step 3: Database Save (flushed)")
 
-        # Step 5: Save all contacts
+        # Step 5: Save all valid contacts
         normalized_phone = normalized.get("phone")
         contacts_in = lead_data.get("contacts", [])
         for i, c in enumerate(contacts_in):
             c_val = c.get("contact_value")
-            if c.get("contact_type") == "phone" and i == 0 and normalized_phone:
-                c_val = normalized_phone
+            c_type = c.get("contact_type", "phone")
+            if c_type == "phone":
+                if i == 0 and normalized_phone:
+                    c_val = normalized_phone
+                else:
+                    c_val = clean_phone_number(c_val)
+            if not is_valid_text(c_val):
+                continue
             contact = Contact(
                 lead_id=lead.lead_id,
-                contact_type=c.get("contact_type", "phone"),
+                contact_type=c_type,
                 contact_value=c_val,
                 sequence_number=c.get("sequence_number", 1),
                 source=c.get("source", "listing")

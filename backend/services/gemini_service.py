@@ -181,85 +181,57 @@ async def normalize_lead_data(raw_lead: dict) -> dict:
 
 
 def local_normalize_lead_data(raw_lead: dict) -> dict:
-    """Fallback parser for normalizing lead data without API access."""
+    """Fallback parser for normalizing lead data using deterministic algorithms."""
+    from services.data_cleaner import (
+        clean_business_name, clean_phone_number, clean_address_text,
+        extract_pin_code, extract_city_and_state, is_valid_text
+    )
     result = raw_lead.copy()
     
-    # 1. Phone number standardization
+    # 1. Clean business name
+    if "business_name" in raw_lead:
+        result["business_name"] = clean_business_name(raw_lead.get("business_name"))
+
+    # 2. Phone number standardization
     phone_val = raw_lead.get("phone")
     if phone_val:
-        result["phone"] = clean_indian_phone(phone_val)
+        result["phone"] = clean_phone_number(phone_val)
 
-    # 2. Extract PIN code (6 digits)
-    address = raw_lead.get("address", "") or ""
-    pin_match = re.search(r"\b([1-9][0-9]{5})\b", address)
-    if pin_match:
-        result["postal_code"] = pin_match.group(1)
+    # 3. Clean address
+    raw_addr = raw_lead.get("address")
+    cleaned_addr = clean_address_text(raw_addr)
+    if cleaned_addr:
+        result["address"] = cleaned_addr
 
-    # 3. Heuristic City and State extraction from address
-    city_list = ["noida", "delhi", "gurgaon", "mumbai", "bangalore", "pune", "chennai", "kolkata", "hyderabad", "ahmedabad", "jaipur", "ghaziabad", "faridabad"]
-    states_map = {
-        "uttar pradesh": ["uttar pradesh", "up"],
-        "haryana": ["haryana", "hr"],
-        "delhi": ["delhi", "nct"],
-        "maharashtra": ["maharashtra", "mh"],
-        "karnataka": ["karnataka", "ka"],
-        "tamil nadu": ["tamil nadu", "tn"],
-        "west bengal": ["west bengal", "wb"],
-        "gujarat": ["gujarat", "gj"]
-    }
-    
-    addr_lower = address.lower()
-    
-    # Detect city
-    if not raw_lead.get("city"):
-        for city in city_list:
-            if re.search(r"\b" + re.escape(city) + r"\b", addr_lower):
-                result["city"] = city.capitalize()
-                break
+    # 4. Extract PIN code (6 digits)
+    if not is_valid_text(raw_lead.get("postal_code")) and cleaned_addr:
+        pin = extract_pin_code(cleaned_addr)
+        if pin:
+            result["postal_code"] = pin
 
-    # Detect state
-    if not raw_lead.get("state"):
-        for state_name, triggers in states_map.items():
-            for trigger in triggers:
-                if re.search(r"\b" + re.escape(trigger) + r"\b", addr_lower):
-                    result["state"] = state_name.title()
-                    break
-            if result.get("state"):
-                break
+    # 5. Extract City and State from address and hints
+    city_hint = raw_lead.get("city")
+    state_hint = raw_lead.get("state")
+    detected_city, detected_state = extract_city_and_state(cleaned_addr, city_hint=city_hint, state_hint=state_hint)
+    if detected_city:
+        result["city"] = detected_city
+    if detected_state:
+        result["state"] = detected_state
+
+    # 6. Clean contact person & category
+    if "contact_person" in raw_lead and not is_valid_text(raw_lead["contact_person"]):
+        result["contact_person"] = None
+    if "category" in raw_lead and not is_valid_text(raw_lead["category"]):
+        result["category"] = None
 
     return result
 
 
 def clean_indian_phone(phone_str: str) -> str:
-    """Standardizes an Indian phone string.
-    Removes leading country code '91' and/or leading '0', allows up to 30 digits,
-    and prepends '+91-' to the final number. Preserves toll-free numbers."""
-    # Remove all non-digit characters
-    digits = re.sub(r"\D", "", phone_str)
-    
-    if not digits:
-        return phone_str
-        
-    # Check if it is a toll-free number
-    if re.match(r"^(1800|1860|1600)", digits):
-        return digits
-
-    # Strip any leading zeros
-    digits = digits.lstrip("0")
-        
-    # Remove '91' country code prefix if present
-    if digits.startswith("91") and len(digits) > 10:
-        digits = digits[2:]
-        # Strip leading zeros again (e.g. if original was 91-0888...)
-        digits = digits.lstrip("0")
-        
-    if not digits:
-        return phone_str
-        
-    # Limit maximum length of final digits to 30
-    digits = digits[:30]
-    
-    return f"+91-{digits}"
+    """Standardizes an Indian phone string into +91-XXXXXXXXXX or toll-free."""
+    from services.data_cleaner import clean_phone_number
+    cleaned = clean_phone_number(phone_str)
+    return cleaned if cleaned else phone_str
 
 
 # ==============================================================================
