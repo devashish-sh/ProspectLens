@@ -314,10 +314,16 @@ class ExtractionPipeline {
         }
 
         try {
-          const cardEl = this.findCardEl(item.business_name, item.listing_url);
+          const cardEl = await this.findCardElAsync(item.business_name, item.listing_url, adapter);
           if (!cardEl) {
             throw new Error("Listing card element not found in results panel");
           }
+
+          // Track previous panel title before clicking to detect DOM transition
+          let prevPanelEl = (adapter.siteKey === "googlemaps")
+            ? this.resolveGoogleMapsPanel()
+            : document.querySelector(panelSelector);
+          const previousPanelTitle = prevPanelEl?.querySelector("h1")?.textContent?.trim() || "";
 
           // Scroll into view & click
           cardEl.scrollIntoView({ block: "center" });
@@ -337,9 +343,9 @@ class ExtractionPipeline {
             clickTarget.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
           }
 
-          // Wait for business detail panel to load and stabilize
-          const panelSelector = adapter.siteKey === "googlemaps" ? "div[role='main']" : ".store-detail";
-          const isLoaded = await this.waitPageStable(panelSelector, 6000, item.business_name);
+          // Wait for business detail panel to load and stabilize (checking against previousPanelTitle)
+          const panelSelector = adapter.siteKey === "googlemaps" ? "div[role='main']" : ".store-detail, .comp-details, .modal-body";
+          const isLoaded = await this.waitPageStable(panelSelector, 6000, item.business_name, previousPanelTitle);
           if (!isLoaded) {
             throw new Error(`Details panel failed to load/stabilize for expected business: "${item.business_name}"`);
           }
@@ -355,7 +361,7 @@ Expected business: ${item.business_name}`);
             throw new Error("Detail panel DOM element not found");
           }
 
-          const panelTitle = panelEl.querySelector("h1")?.textContent?.trim() || "";
+          const panelTitle = panelEl.querySelector("h1, h2.store-name, .comp-name, .company-name")?.textContent?.trim() || "";
           console.log(`[DETAIL PANEL]
 Detected business: ${panelTitle}`);
 
@@ -378,6 +384,11 @@ Phone: ${deepData.primary_phone || "—"}
 Website: ${deepData.website || "—"}`);
 
           console.log("[EXTRACTION OBJECT]", JSON.stringify(deepData, null, 2));
+
+          // Strict identity verification: Ensure extracted data matches the target lead
+          if (!this.isTitleMatching(panelTitle, item.business_name)) {
+            throw new Error(`Anti-contamination check failed: Refusing to merge data for mismatched title "${panelTitle}" into "${item.business_name}"`);
+          }
 
           // Merge with existing snapshot lead in DB
           const mergeRes = await Messaging.mergeLeadData(batchId, item.lead_id, deepData);
@@ -435,6 +446,37 @@ Merged website: ${mergeRes.lead?.website || "—"}`);
     } catch (err) {}
   }
 
+  async findCardElAsync(businessName, listingUrl, adapter) {
+    // 1. Direct search in current DOM
+    let card = this.findCardEl(businessName, listingUrl);
+    if (card) return card;
+
+    // 2. If Google Maps and virtualized out of viewport, progressively scroll the feed container
+    if (adapter && adapter.siteKey === "googlemaps") {
+      const feed = document.querySelector("div[role='feed']");
+      if (feed) {
+        const originalScroll = feed.scrollTop;
+        // Scroll forward in steps
+        for (let step = 0; step < 4; step++) {
+          feed.scrollBy({ top: 300, behavior: "smooth" });
+          await DOMHelpers.sleep(350);
+          card = this.findCardEl(businessName, listingUrl);
+          if (card) return card;
+        }
+        // Scroll backward if needed
+        feed.scrollTop = originalScroll;
+        for (let step = 0; step < 4; step++) {
+          feed.scrollBy({ top: -300, behavior: "smooth" });
+          await DOMHelpers.sleep(350);
+          card = this.findCardEl(businessName, listingUrl);
+          if (card) return card;
+        }
+        feed.scrollTop = originalScroll;
+      }
+    }
+    return card;
+  }
+
   findCardEl(businessName, listingUrl) {
     // 1. Try to find card inside .Nv2PK elements by listing URL
     if (listingUrl) {
@@ -471,7 +513,7 @@ Merged website: ${mergeRes.lead?.website || "—"}`);
       for (const link of links) {
         const href = link.getAttribute("href") || "";
         if (href && (href.includes(listingUrl) || listingUrl.includes(href))) {
-          return link.closest(".Nv2PK") || link.closest(".store-name") || link;
+          return link.closest(".Nv2PK") || link.closest(".store-name") || link.closest(".gcnm") || link;
         }
       }
     }
@@ -483,7 +525,7 @@ Merged website: ${mergeRes.lead?.website || "—"}`);
         if (text && text.toLowerCase().trim() === targetName) {
           // Avoid returning elements from the detail panel
           if (el.closest("div[role='main']")) continue;
-          return el.closest(".Nv2PK") || el.closest(".store-name") || el;
+          return el.closest(".Nv2PK") || el.closest(".store-name") || el.closest(".gcnm") || el;
         }
       }
     }
@@ -591,7 +633,7 @@ Merged website: ${mergeRes.lead?.website || "—"}`);
     });
   }
 
-  async waitPageStable(selector, timeoutMs = 6000, targetTitle = null) {
+  async waitPageStable(selector, timeoutMs = 6000, targetTitle = null, previousTitle = null) {
     return new Promise((resolve) => {
       const startTime = Date.now();
       let observer = null;
@@ -620,10 +662,16 @@ Merged website: ${mergeRes.lead?.website || "—"}`);
           : document.querySelector(selector);
         if (!el) return;
 
-        // Verify title matches if expected
+        const h1 = el.querySelector("h1, h2.store-name, .comp-name, .company-name");
+        const h1Text = h1 ? h1.textContent.trim() : "";
+
+        // Anti-contamination guard: If panel is still showing previous title and hasn't transitioned, keep waiting
+        if (previousTitle && h1Text && this.isTitleMatching(h1Text, previousTitle) && targetTitle && !this.isTitleMatching(previousTitle, targetTitle)) {
+          return;
+        }
+
+        // Verify title matches expected target
         if (targetTitle) {
-          const h1 = el.querySelector("h1");
-          const h1Text = h1 ? h1.textContent.trim() : "";
           if (!this.isTitleMatching(h1Text, targetTitle)) {
             // Wait for next mutation to match title
             return;
@@ -653,7 +701,7 @@ Merged website: ${mergeRes.lead?.website || "—"}`);
         }
         stabilityTimer = setTimeout(() => {
           cleanUp();
-          resolve(true); // Stable for 400ms!
+          resolve(true); // Stable!
         }, 400);
       };
 

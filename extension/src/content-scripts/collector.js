@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       pipeline.run(adapter, message.batch_id, message.mode);
     } else {
       Logger.warn(`No supported adapter found for URL: ${url}`);
-      Messaging.sendError("Unsupported page. Open IndiaMART, Google Maps, or Justdial.");
+      Messaging.sendError("Unsupported page. Open Google Maps, IndiaMART, Justdial, or TradeIndia.");
     }
   } else if (message.action === "PAUSE_COLLECTION") {
     StateManager.setState(StateManager.states.PAUSED);

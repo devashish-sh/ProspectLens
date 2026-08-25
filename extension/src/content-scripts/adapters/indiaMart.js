@@ -130,5 +130,83 @@ class IndiaMartAdapter extends BaseAdapter {
       contacts: contacts
     }, emptyFields, context);
   }
+
+  extractDeepLead(panel) {
+    const result = {
+      flexible_metadata: {}
+    };
+
+    if (!panel) return result;
+    const panelText = panel.textContent || "";
+
+    // 1. Business Name
+    const nameEl = panel.querySelector(".gcnm, .comp-name, .company-name, #company_name_div, h1, h2");
+    if (nameEl) {
+      result.business_name = Normalizer.cleanBusinessName(nameEl.textContent?.trim() || "");
+    }
+
+    // 2. Address & Location
+    const addrEl = panel.querySelector(".addDetail, .addr, .address, [class*='address'], [class*='location'], .cty-t, .loc");
+    const address = addrEl?.textContent?.trim() || "";
+    if (address) {
+      result.address = address;
+      const pinMatch = address.match(/\b([1-9][0-9]{5})\b/);
+      if (pinMatch) {
+        result.postal_code = pinMatch[1];
+      }
+      const parts = address.split(",").map(p => p.trim());
+      if (parts.length >= 2) {
+        result.city = parts[parts.length - 2].replace(/\d+/g, "").trim();
+        result.state = parts[parts.length - 1].replace(/\d+/g, "").trim();
+      }
+    }
+
+    // 3. Contacts (Phone, Email, Alternate Numbers)
+    const contacts = this.extractContacts(panel);
+    result.contacts = contacts;
+
+    const phones = contacts.filter(c => c.contact_type === "phone").map(c => c.contact_value);
+    if (phones.length > 0) {
+      result.primary_phone = Normalizer.normalizeIndianPhone(phones[0]);
+      if (phones.length > 1) {
+        result.secondary_phones = phones.slice(1, 4).map(p => Normalizer.normalizeIndianPhone(p)).join(", ");
+      }
+    }
+
+    const emails = contacts.filter(c => c.contact_type === "email").map(c => c.contact_value);
+    if (emails.length > 0) {
+      result.primary_email = emails[0];
+    }
+
+    // 4. Website
+    const webEl = panel.querySelector("a[href*='http']:not([href*='indiamart.com']), a.website-link, a[class*='web']");
+    if (webEl && webEl.href) {
+      const cleanUrl = Normalizer.cleanWebsiteUrl(webEl.href);
+      if (cleanUrl) {
+        result.website = cleanUrl;
+        try {
+          const parsed = new URL(cleanUrl);
+          result.website_domain = parsed.hostname.replace("www.", "");
+        } catch {}
+      }
+    }
+
+    // 5. Metadata / Verification Badges
+    const gstMatch = panelText.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}\b/);
+    if (gstMatch) {
+      result.flexible_metadata.gstin = gstMatch[0];
+    }
+
+    if (panelText.includes("Verified Exporter") || panelText.includes("TrustSEAL") || panelText.includes("Verified Supplier")) {
+      result.flexible_metadata.verified_status = "Verified Supplier";
+    }
+
+    const yearMatch = panelText.match(/Member Since\s*[:\-]?\s*(\d{4})|Established\s*[:\-]?\s*(\d{4})/i);
+    if (yearMatch) {
+      result.flexible_metadata.established_year = yearMatch[1] || yearMatch[2];
+    }
+
+    return result;
+  }
 }
 window.IndiaMartAdapter = IndiaMartAdapter;

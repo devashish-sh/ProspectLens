@@ -78,18 +78,34 @@ async function checkBackend() {
   const text     = badge ? badge.querySelector(".dash-status-text") : null;
   const overlay  = document.getElementById("offline-overlay");
 
-  const data = await chrome.storage.local.get("engineState");
-  const state = data.engineState || "OFFLINE";
+  let isAlive = false;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1800);
+    const res = await fetch(`${API_BASE}/health`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      isAlive = data.status === "ok";
+    }
+  } catch (err) {
+    isAlive = false;
+  }
 
-  if (badge && text) {
-    if (state === "RUNNING") {
-      badge.className = "backend-pill online";
-      text.textContent = "Engine Running";
-      if (overlay) overlay.classList.add("hidden");
-      return true;
-    } else if (state === "STARTING") {
-      badge.className = "backend-pill checking";
-      text.textContent = "Starting...";
+  if (isAlive) {
+    if (badge) badge.className = "backend-pill online";
+    if (text) text.textContent = "Engine Running";
+    if (overlay) overlay.classList.add("hidden");
+    chrome.storage.local.set({ engineState: "RUNNING" });
+    return true;
+  } else {
+    // Check if transitional state is recorded
+    const data = await chrome.storage.local.get("engineState");
+    const state = data.engineState || "OFFLINE";
+
+    if (state === "STARTING") {
+      if (badge) badge.className = "backend-pill checking";
+      if (text) text.textContent = "Starting...";
       if (overlay) {
         overlay.classList.remove("hidden");
         const heading = overlay.querySelector("h2");
@@ -100,22 +116,9 @@ async function checkBackend() {
         if (desc) desc.textContent = "Launching the backend process and running diagnostic checks. Please wait...";
       }
       return false;
-    } else if (state === "STOPPING") {
-      badge.className = "backend-pill checking";
-      text.textContent = "Stopping...";
-      if (overlay) {
-        overlay.classList.remove("hidden");
-        const heading = overlay.querySelector("h2");
-        const statusIcon = overlay.querySelector(".offline-icon");
-        const desc = overlay.querySelector("p");
-        if (heading) heading.textContent = "Stopping Engine...";
-        if (statusIcon) statusIcon.textContent = "🟠";
-        if (desc) desc.textContent = "Gracefully shutting down the backend process...";
-      }
-      return false;
-    } else { // OFFLINE
-      badge.className = "backend-pill offline";
-      text.textContent = "Engine Offline";
+    } else {
+      if (badge) badge.className = "backend-pill offline";
+      if (text) text.textContent = "Engine Offline";
       if (overlay) {
         overlay.classList.remove("hidden");
         const heading = overlay.querySelector("h2");
@@ -128,7 +131,6 @@ async function checkBackend() {
       return false;
     }
   }
-  return state === "RUNNING";
 }
 
 // ============================================================

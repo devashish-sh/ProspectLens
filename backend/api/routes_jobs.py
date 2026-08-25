@@ -474,11 +474,13 @@ def merge_queue_lead_data(job_id: str, lead_id: str, payload: LeadMergePayload, 
         
     # Calculate completeness
     from services.collection_pipeline import calculate_lead_completeness
+    from services.deduplication import compute_dedup_hash
     contacts_list = payload.contacts or []
     comp_score = calculate_lead_completeness(lead, contacts_list)
     lead.completeness_score = comp_score
     lead.status = "Incomplete" if comp_score < 50.0 else "New"
     lead.collection_status = "success"  # Explicitly mark collection as success
+    lead.dedup_hash = compute_dedup_hash(lead.business_name, lead.source_site, lead.address or "")
     lead.updated_at = datetime.utcnow()
     session.add(lead)
     

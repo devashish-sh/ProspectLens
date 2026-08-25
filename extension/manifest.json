@@ -17,7 +17,9 @@
     "https://dir.indiamart.com/*",
     "https://www.google.com/maps/*",
     "https://maps.google.com/*",
-    "https://www.justdial.com/*"
+    "https://www.justdial.com/*",
+    "https://www.tradeindia.com/*",
+    "https://*.tradeindia.com/*"
   ],
   "background": {
     "service_worker": "src/background/background.js",
@@ -39,7 +41,9 @@
         "https://dir.indiamart.com/*",
         "https://www.google.com/maps/*",
         "https://maps.google.com/*",
-        "https://www.justdial.com/*"
+        "https://www.justdial.com/*",
+        "https://www.tradeindia.com/*",
+        "https://*.tradeindia.com/*"
       ],
       "js": [
         "src/content-scripts/utils/logger.js",
