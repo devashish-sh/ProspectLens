@@ -61,6 +61,51 @@ function getDetailSpinnerHtml(message) {
   `;
 }
 
+function showToast(message, type = "success") {
+  let toast = document.getElementById("dash-toast-notification");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "dash-toast-notification";
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 999999;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      opacity: 0;
+      transform: translateY(20px);
+      pointer-events: none;
+    `;
+    document.body.appendChild(toast);
+  }
+
+  if (type === "error") {
+    toast.style.background = "#2a1215";
+    toast.style.border = "1px solid #ea4335";
+    toast.style.color = "#fca5a5";
+  } else {
+    toast.style.background = "#142416";
+    toast.style.border = "1px solid #4ade80";
+    toast.style.color = "#86efac";
+  }
+
+  toast.textContent = message;
+  toast.style.opacity = "1";
+  toast.style.transform = "translateY(0)";
+
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(20px)";
+  }, 3500);
+}
+window.showToast = showToast;
+
 // ============================================================
 // BROADCAST STATE UPDATE
 // ============================================================
@@ -96,12 +141,17 @@ async function checkBackend() {
     if (badge) badge.className = "backend-pill online";
     if (text) text.textContent = "Engine Running";
     if (overlay) overlay.classList.add("hidden");
-    chrome.storage.local.set({ engineState: "RUNNING" });
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ engineState: "RUNNING" });
+    }
     return true;
   } else {
     // Check if transitional state is recorded
-    const data = await chrome.storage.local.get("engineState");
-    const state = data.engineState || "OFFLINE";
+    let state = "OFFLINE";
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      const data = await chrome.storage.local.get("engineState");
+      state = data.engineState || "OFFLINE";
+    }
 
     if (state === "STARTING") {
       if (badge) badge.className = "backend-pill checking";
@@ -412,12 +462,15 @@ async function loadCollectionJobs() {
 // DATA CAPSULES GRID LOADER (SOURCE MEMORY CENTER)
 // ============================================================
 async function updateDataCapsules(statsData) {
-  const sourceCounts = statsData.by_source || {};
-
   try {
-    const batchRes = await fetch(`${API_BASE}/batches`);
-    const batchData = await batchRes.json();
+    const [batchRes, capRes] = await Promise.all([
+      fetch(`${API_BASE}/batches`).catch(() => null),
+      fetch(`${API_BASE}/capsules`).catch(() => null)
+    ]);
+
+    const batchData = batchRes && batchRes.ok ? await batchRes.json() : { batches: [] };
     const batches = batchData.batches || [];
+    const capSummaries = capRes && capRes.ok ? await capRes.json() : {};
 
     const CAPSULES_DEF = [
       { key: "googlemaps", name: "Google Maps", icon: "🗺️" },
@@ -428,34 +481,28 @@ async function updateDataCapsules(statsData) {
 
     // Source Memory Center: ALWAYS render all 4 capsules
     CAPSULES_DEF.forEach(c => {
-      const count = sourceCounts[c.key] || 0;
+      const cap = capSummaries[c.key] || { pending_review: 0, approved_leads: 0, total_collected: 0 };
       const sourceBatches = batches.filter(b => (b.source_site || "").toLowerCase().replace(/\s+/g, "") === c.key);
-      
-      // Load tracking stats from localStorage
-      const visits = localStorage.getItem(`prospectlens-visits-${c.key}`) || (sourceBatches.length > 0 ? sourceBatches.length * 2 + 1 : 0);
-      const searches = localStorage.getItem(`prospectlens-searches-${c.key}`) || sourceBatches.length;
 
-      let lastUpdated = null;
-      if (sourceBatches.length > 0) {
+      let lastUpdated = cap.last_sync || null;
+      if (!lastUpdated && sourceBatches.length > 0) {
         sourceBatches.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
         lastUpdated = sourceBatches[0].started_at;
-      } else {
-        lastUpdated = localStorage.getItem(`prospectlens-last-active-${c.key}`) || null;
       }
 
       const timeText = lastUpdated ? formatTimeAgo(lastUpdated) : "Waiting";
-      const visitsLabel = visits == 1 ? "1 Visit" : `${visits} Visits`;
-      const statusText = count > 0 ? "Active" : "Waiting";
+      const pending = cap.pending_review || 0;
+      const approved = cap.approved_leads || 0;
       
       const detailsEl = document.getElementById(`dash-cap-${c.key}-details`);
       if (detailsEl) {
-        detailsEl.innerHTML = `Visited ${visitsLabel} • ${count} Leads • Last Active: ${timeText}`;
+        detailsEl.innerHTML = `<span style="font-weight: 700; color: ${pending > 0 ? '#4ade80' : 'var(--text-muted)'};">${pending} Pending Review</span> • ${approved} Approved • ${timeText}`;
       }
     });
 
     // If currently viewing a capsule details workspace, refresh it
     if (currentSelectedCapsule) {
-      refreshCapsuleWorkspace(currentSelectedCapsule, batches);
+      loadWorkspaceLeads();
     }
 
   } catch (err) {
@@ -490,6 +537,8 @@ function formatTimeAgo(dateStr) {
 // ============================================================
 let currentWorkspaceLeads = [];
 let workspaceSearchQuery = "";
+let workspaceQualityFilter = "";
+let workspaceModeFilter = "";
 
 const CAPSULE_LABELS = {
   indiamart:  "IndiaMART",
@@ -514,6 +563,13 @@ async function openCapsuleWorkspace(sourceSite) {
   const searchInput = document.getElementById("workspace-search");
   if (searchInput) searchInput.value = "";
   workspaceSearchQuery = "";
+  workspaceQualityFilter = "";
+  workspaceModeFilter = "";
+
+  const qSelect = document.getElementById("workspace-filter-quality");
+  if (qSelect) qSelect.value = "";
+  const mSelect = document.getElementById("workspace-filter-mode");
+  if (mSelect) mSelect.value = "";
 
   // Fetch unapproved leads
   await loadWorkspaceLeads();
@@ -549,24 +605,39 @@ async function loadWorkspaceLeads() {
 function renderWorkspaceLeads() {
   const tbody = document.getElementById("workspace-leads-tbody");
   
-  // Apply frontend search filter
+  // Apply frontend search & quality filters
   const filtered = currentWorkspaceLeads.filter(l => {
-    if (!workspaceSearchQuery) return true;
-    const q = workspaceSearchQuery.toLowerCase();
-    return (l.business_name || "").toLowerCase().includes(q) ||
-           (l.category || "").toLowerCase().includes(q) ||
-           (l.city || "").toLowerCase().includes(q) ||
-           (l.address || "").toLowerCase().includes(q) ||
-           (l.search_keyword || "").toLowerCase().includes(q) ||
-           (l.search_location || "").toLowerCase().includes(q) ||
-           (l.search_query || "").toLowerCase().includes(q) ||
-           (l.open_status || "").toLowerCase().includes(q);
+    if (workspaceSearchQuery) {
+      const q = workspaceSearchQuery.toLowerCase();
+      const match = (l.business_name || "").toLowerCase().includes(q) ||
+                    (l.category || "").toLowerCase().includes(q) ||
+                    (l.city || "").toLowerCase().includes(q) ||
+                    (l.address || "").toLowerCase().includes(q) ||
+                    (l.search_keyword || "").toLowerCase().includes(q) ||
+                    (l.search_location || "").toLowerCase().includes(q) ||
+                    (l.search_query || "").toLowerCase().includes(q) ||
+                    (l.open_status || "").toLowerCase().includes(q);
+      if (!match) return false;
+    }
+
+    if (workspaceQualityFilter) {
+      const score = calculateLeadCompleteness(l);
+      if (workspaceQualityFilter === "strong" && score < 75) return false;
+      if (workspaceQualityFilter === "usable" && (score < 50 || score >= 75)) return false;
+      if (workspaceQualityFilter === "incomplete" && score >= 50) return false;
+    }
+
+    if (workspaceModeFilter && l.collection_mode !== workspaceModeFilter) {
+      return false;
+    }
+
+    return true;
   });
 
   // 2. Empty State
   if (filtered.length === 0) {
-    if (workspaceSearchQuery) {
-      tbody.innerHTML = getTableEmptyStateHtml(9, "🔍", "No Matches Found", `No pending leads match "${escHtml(workspaceSearchQuery)}".`);
+    if (workspaceSearchQuery || workspaceQualityFilter || workspaceModeFilter) {
+      tbody.innerHTML = getTableEmptyStateHtml(9, "🔍", "No Matches Found", `No pending leads match your filters.`);
     } else {
       tbody.innerHTML = getTableEmptyStateHtml(9, "🎉", "All Leads Processed", "No pending leads remaining in this Data Capsule.");
     }
@@ -577,31 +648,19 @@ function renderWorkspaceLeads() {
   tbody.innerHTML = filtered.map(l => {
     const location = l.city || l.address || "—";
     const phone = l.phone || l.primary_phone || "—";
-    const website = l.website ? `<a href="${l.website}" target="_blank" style="color: var(--accent); text-decoration: underline;">${escHtml(l.website)}</a>` : "—";
+    const website = l.website ? `<a href="${escHtml(l.website)}" target="_blank" style="color: var(--accent); text-decoration: underline;">${escHtml(l.website)}</a>` : "—";
+    const modeBadge = l.collection_mode === "deep" ? `<span style="font-size: 10px; color: #a78bfa;">Deep</span>` : `<span style="font-size: 10px; color: #60a5fa;">Quick</span>`;
     
-    let timeStr = "—";
-    if (l.collected_at) {
-      try {
-        let parsedStr = l.collected_at;
-        if (!parsedStr.endsWith("Z") && !parsedStr.includes("+")) {
-          parsedStr += "Z";
-        }
-        timeStr = new Date(parsedStr).toLocaleString("en-IN", { hour12: true });
-      } catch {
-        timeStr = l.collected_at;
-      }
-    }
-
     const score = calculateLeadCompleteness(l);
     const quality = getLeadQualityBadge(score);
     let qualityClass = "badge-quality-low";
-    if (score >= 80) qualityClass = "badge-quality-high";
-    else if (score >= 60) qualityClass = "badge-quality-medium";
+    if (score >= 75) qualityClass = "badge-quality-high";
+    else if (score >= 50) qualityClass = "badge-quality-medium";
 
     const qualityHtml = `
       <div class="status-badge ${qualityClass}" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px;">
         <span>${score}%</span>
-        <span style="font-size: 8px;">${quality.stars}</span>
+        <span style="font-size: 9px;">${quality.label}</span>
       </div>
     `;
 
@@ -615,10 +674,12 @@ function renderWorkspaceLeads() {
         <td style="padding: 12px 16px; color: var(--text-muted);">${escHtml(location)}</td>
         <td style="padding: 12px 16px; color: var(--text-muted);">${escHtml(phone)}</td>
         <td style="padding: 12px 16px; color: var(--text-muted);">${website}</td>
-        <td style="padding: 12px 16px; color: var(--text-muted); font-size: 11px;">${escHtml(timeStr)}</td>
+        <td style="padding: 12px 16px;">${modeBadge}</td>
         <td style="padding: 12px 16px;">${qualityHtml}</td>
         <td style="padding: 12px 16px;">
-          <span style="display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: bold; background: rgba(234, 67, 53, 0.1); color: #ea4335; border-radius: 3px;">Pending</span>
+          <button class="btn btn-primary" onclick="approveLeadFromCapsule('${l.lead_id}')" style="padding: 3px 8px; font-size: 10px; color: #000; font-weight: bold; margin: 0;">
+            Approve
+          </button>
         </td>
       </tr>
     `;
@@ -656,6 +717,38 @@ function renderWorkspaceLeads() {
 
   updateWorkspaceSelectionBar();
 }
+
+async function approveLeadFromCapsule(leadId) {
+  try {
+    const res = await fetch(`${API_BASE}/leads/${leadId}/approve`, { method: "POST" });
+    if (!res.ok) throw new Error("Failed to approve");
+    selectedCapsuleLeads.delete(leadId);
+    showToast("Lead approved and promoted to Main Leads!");
+    await loadWorkspaceLeads();
+    await loadStats();
+  } catch (err) {
+    console.error(err);
+    alert("Failed to approve lead: " + err.message);
+  }
+}
+window.approveLeadFromCapsule = approveLeadFromCapsule;
+
+async function approveEntireCapsuleQuick(sourceSite) {
+  try {
+    const res = await fetch(`${API_BASE}/capsules/${sourceSite}/approve`, { method: "POST" });
+    if (!res.ok) throw new Error("Failed to approve capsule");
+    showToast(`Approved all leads in ${CAPSULE_LABELS[sourceSite] || sourceSite} Capsule!`);
+    await updateDataCapsules({});
+    await loadStats();
+    if (currentSelectedCapsule === sourceSite) {
+      await loadWorkspaceLeads();
+    }
+  } catch (e) {
+    console.error(e);
+    alert("Approval failed: " + e.message);
+  }
+}
+window.approveEntireCapsuleQuick = approveEntireCapsuleQuick;
 
 function updateWorkspaceSelectionBar() {
   const bar = document.getElementById("workspace-bulk-bar");
@@ -1240,9 +1333,11 @@ async function loadLeads() {
 
 function sortLeads() {
   if (filters.sort === "date-desc") {
-    allLeads.sort((a, b) => new Date(b.collected_at) - new Date(a.collected_at));
+    allLeads.sort((a, b) => new Date(b.collected_at || 0) - new Date(a.collected_at || 0));
   } else if (filters.sort === "date-asc") {
-    allLeads.sort((a, b) => new Date(a.collected_at) - new Date(b.collected_at));
+    allLeads.sort((a, b) => new Date(a.collected_at || 0) - new Date(b.collected_at || 0));
+  } else if (filters.sort === "quality-desc") {
+    allLeads.sort((a, b) => calculateLeadCompleteness(b) - calculateLeadCompleteness(a));
   } else if (filters.sort === "name-asc") {
     allLeads.sort((a, b) => (a.business_name || "").localeCompare(b.business_name || ""));
   } else if (filters.sort === "name-desc") {
@@ -1283,12 +1378,20 @@ function renderLeadsPage() {
       return false;
     }
 
-    // D. Collection Mode Filter
+    // D. Quality Filter
+    if (filters.quality) {
+      const score = calculateLeadCompleteness(lead);
+      if (filters.quality === "strong" && score < 75) return false;
+      if (filters.quality === "usable" && (score < 50 || score >= 75)) return false;
+      if (filters.quality === "incomplete" && score >= 50) return false;
+    }
+
+    // E. Collection Mode Filter
     if (filters.mode && lead.collection_mode !== filters.mode) {
       return false;
     }
 
-    // E. City Filter
+    // F. City Filter
     if (filters.city && lead.city !== filters.city) {
       return false;
     }
@@ -1442,7 +1545,7 @@ async function bulkApproveWorkspaceLeads() {
   const leadIds = Array.from(selectedCapsuleLeads);
 
   try {
-    const res = await fetch(`${API_BASE}/leads/approve`, {
+    const res = await fetch(`${API_BASE}/leads/bulk-approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lead_ids: leadIds })
@@ -1454,14 +1557,14 @@ async function bulkApproveWorkspaceLeads() {
     if (headerCheckbox) headerCheckbox.checked = false;
 
     // Refresh views
-    await loadWorkspaceLeads(currentSelectedCapsule);
+    await loadWorkspaceLeads();
     await loadStats();
     await loadLeads();
 
-    alert(`Successfully approved ${leadIds.length} leads!`);
+    showToast(`Successfully approved ${leadIds.length} leads!`);
   } catch (err) {
     console.error(err);
-    alert("Failed to approve selected leads.");
+    alert("Failed to approve selected leads: " + err.message);
   }
 }
 
@@ -1642,11 +1745,87 @@ async function openLeadModal(leadId) {
     `;
 
     // 4. Data Loaded State
+    const primaryPhone = lead.phone || lead.primary_phone || (phones.length ? phones[0] : null);
+    const primaryEmail = lead.email || lead.primary_email || (emails.length ? emails[0] : null);
+    const sourceBadges = {
+      googlemaps: `<span class="source-badge source-googlemaps">🗺️ Google Maps</span>`,
+      indiamart: `<span class="source-badge source-indiamart">🏭 IndiaMART</span>`,
+      justdial: `<span class="source-badge source-justdial">📞 Justdial</span>`,
+      tradeindia: `<span class="source-badge source-tradeindia">📦 TradeIndia</span>`
+    };
+    const srcBadge = sourceBadges[lead.source_site] || `<span class="source-badge">${sourceLabel(lead.source_site)}</span>`;
+
     body.innerHTML = `
-      <!-- Back Button -->
-      <button class="btn btn-ghost" onclick="document.getElementById('modal-overlay').classList.add('hidden');" style="margin-bottom: 16px; padding: 6px 12px; font-size: 11px; display: flex; align-items: center; gap: 6px;">
-        ← Back to Leads Table
-      </button>
+      <!-- Header Row & Quick Provenance -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+        <button class="btn btn-ghost" onclick="document.getElementById('modal-overlay').classList.add('hidden');" style="padding: 6px 12px; font-size: 11px; display: flex; align-items: center; gap: 6px; margin: 0;">
+          ← Back
+        </button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          ${srcBadge}
+          <span style="font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 4px; ${modeBadgeStyle}">
+            ${modeLabel}
+          </span>
+          <span class="status-badge ${qualityClass}" style="padding: 3px 8px; font-size: 11px; font-weight: bold; border-radius: 4px;">
+            ${score}% (${quality.label})
+          </span>
+        </div>
+      </div>
+
+      <!-- Quick Contact Outreach Action Bar -->
+      <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+        ${primaryPhone ? `
+          <a href="tel:${escHtml(primaryPhone)}" class="btn btn-primary" style="color:#000; font-weight:bold; text-decoration:none; padding:8px 14px; margin:0;">
+            📞 Call ${escHtml(primaryPhone)}
+          </a>
+        ` : `
+          <button class="btn btn-ghost" disabled style="opacity:0.4; padding:8px 14px; margin:0; cursor:not-allowed;">
+            📞 Phone Unavailable
+          </button>
+        `}
+        ${primaryEmail ? `
+          <a href="mailto:${escHtml(primaryEmail)}" class="btn btn-ghost" style="text-decoration:none; padding:8px 14px; border:1px solid var(--accent); color:var(--accent); margin:0;">
+            ✉️ Email ${escHtml(primaryEmail)}
+          </a>
+        ` : `
+          <button class="btn btn-ghost" disabled style="opacity:0.4; padding:8px 14px; margin:0; cursor:not-allowed;">
+            ✉️ Email Unavailable
+          </button>
+        `}
+        ${lead.website ? `
+          <a href="${escHtml(lead.website)}" target="_blank" class="btn btn-ghost" style="text-decoration:none; padding:8px 14px; margin:0;">
+            🌐 Visit Website ↗
+          </a>
+        ` : ""}
+        ${lead.listing_url ? `
+          <a href="${escHtml(lead.listing_url)}" target="_blank" class="btn btn-ghost" style="text-decoration:none; padding:8px 14px; margin:0;">
+            📍 Source Listing ↗
+          </a>
+        ` : ""}
+      </div>
+
+      <!-- Lead Workflow & Outreach Notes -->
+      <div style="${sectionStyle}">
+        <h3 style="${headerStyle}">Lead Workflow & Research Notes</h3>
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-bottom: 6px;">
+          <div>
+            <label style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 4px;">CRM Status</label>
+            <select id="modal-lead-status" class="f-select" style="width: 100%;" onchange="updateLeadStatusFromModal('${lead.lead_id}', this.value)">
+              <option value="new" ${lead.lead_status === 'new' ? 'selected' : ''}>🟢 New Lead</option>
+              <option value="contacted" ${lead.lead_status === 'contacted' ? 'selected' : ''}>🔵 Contacted</option>
+              <option value="qualified" ${lead.lead_status === 'qualified' ? 'selected' : ''}>🟡 Qualified</option>
+              <option value="closed" ${lead.lead_status === 'closed' ? 'selected' : ''}>⚪ Closed</option>
+            </select>
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Research Notes</label>
+              <span id="modal-notes-status" style="font-size: 10px; color: #4ade80; display: none;">Saved</span>
+            </div>
+            <textarea id="modal-lead-notes" placeholder="Write prospect research notes, decision maker contacts, or outreach logs..." style="width: 100%; box-sizing: border-box; height: 60px; background: #111; border: 1px solid #222; border-radius: 4px; color: #fff; padding: 8px; font-size: 11px; resize: vertical;" onblur="saveLeadNotesFromModal('${lead.lead_id}', this.value)">${escHtml(lead.notes || '')}</textarea>
+          </div>
+        </div>
+      </div>
 
       <!-- Lead Quality & Completeness Card -->
       <div style="${sectionStyle}">
@@ -1656,8 +1835,8 @@ async function openLeadModal(leadId) {
             <span style="font-size: 14px; font-weight: bold; color: var(--text);">${score}% Completeness</span>
             ${needsEnrichmentHtml}
           </div>
-          <span style="font-size: 11px; font-weight: bold; padding: 2px 6px; border-radius: 4px; ${modeBadgeStyle}">
-            ${modeLabel}
+          <span style="color: ${quality.color}; font-weight: bold; font-size: 12px;">
+            ${quality.stars} (${quality.label})
           </span>
         </div>
         
@@ -1666,31 +1845,7 @@ async function openLeadModal(leadId) {
           <div style="width: ${score}%; height: 100%; background: ${quality.color}; border-radius: 3px;"></div>
         </div>
 
-        <div style="${rowStyle} border-bottom: none; padding: 0;">
-          <span style="${labelStyle}">Quality Rating</span>
-          <span style="color: ${quality.color}; font-weight: bold; font-size: 12px;">
-            ${quality.stars} (${quality.label})
-          </span>
-        </div>
-
         ${checklistHtml}
-      </div>
-
-      <!-- Business Information -->
-      <div style="${sectionStyle}">
-        <h3 style="${headerStyle}">Business Information</h3>
-        ${row("Business Name", val(lead.business_name))}
-        ${row("Category", val(lead.category))}
-        ${row("Sub Category", val(lead.sub_category))}
-        ${row("Description", val(lead.service_name))}
-        ${row("Rating", val(lead.rating))}
-        ${row("Review Count", val(lead.review_count))}
-        ${row("Open Status", val(lead.open_status))}
-        ${row("Price Level", val(lead.price_level))}
-        ${row("Displayed Price", val(lead.displayed_price))}
-        ${row("Price Type", val(lead.price_type))}
-        ${row("Website Domain", val(lead.website_domain))}
-        ${row("Business Status", val(lead.status))}
       </div>
 
       <!-- Contact Information -->
@@ -1713,58 +1868,43 @@ async function openLeadModal(leadId) {
         ${row("Pincode", val(lead.postal_code))}
       </div>
 
-      <!-- Online Presence -->
+      <!-- Business Information -->
       <div style="${sectionStyle}">
-        <h3 style="${headerStyle}">Online Presence</h3>
-        ${row("Website", lead.website ? `<a href="${lead.website}" target="_blank" style="color:var(--accent); text-decoration:underline;">${escHtml(lead.website)}</a>` : val(null))}
-        ${row("Google Maps URL", lead.listing_url ? `<a href="${lead.listing_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">Open Maps →</a>` : val(null))}
-        ${row("Business Profile URL", lead.business_profile_url ? `<a href="${lead.business_profile_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">Open Profile →</a>` : val(null))}
+        <h3 style="${headerStyle}">Business Overview</h3>
+        ${row("Business Name", val(lead.business_name))}
+        ${row("Category", val(lead.category))}
+        ${row("Sub Category", val(lead.sub_category))}
+        ${row("Rating", val(lead.rating))}
+        ${row("Review Count", val(lead.review_count))}
+        ${row("Open Status / Timings", val(lead.open_status))}
+        ${row("Website Domain", val(lead.website_domain))}
       </div>
 
-      <!-- Collection Information -->
+      <!-- Online Presence & Source Provenance -->
       <div style="${sectionStyle}">
-        <h3 style="${headerStyle}">Collection Information</h3>
+        <h3 style="${headerStyle}">Source Provenance & Context</h3>
         ${row("Source Site", val(sourceLabel(lead.source_site)))}
-        ${row("Source Business ID", val(lead.source_business_id))}
-        ${row("Collector Version", val(lead.collector_version))}
-        ${row("Collection Mode", val(lead.collection_mode))}
-        ${row("Search Query", val(lead.search_query))}
-        ${row("Search Keyword", val(lead.search_keyword))}
+        ${row("Search Query", val(lead.search_query || lead.search_keyword))}
         ${row("Search Location", val(lead.search_location))}
-        ${row("Search URL", lead.directory_search_url ? `<a href="${lead.directory_search_url}" target="_blank" style="color:var(--accent); text-decoration:underline; word-break: break-all;">Open Search URL →</a>` : val(null))}
-        ${row("Collection Date", val(lead.collection_date))}
-        ${row("Collection Time", val(lead.collection_time))}
-        ${row("Collected Time", lead.collected_at ? val(new Date(lead.collected_at).toLocaleString()) : val(null))}
-        ${row("Last Updated", lead.updated_at ? val(new Date(lead.updated_at).toLocaleString()) : val(null))}
-      </div>
-
-      <!-- Additional Metadata -->
-      <div style="${sectionStyle}">
-        <h3 style="${headerStyle}">Additional Metadata</h3>
-        ${row("Completeness Score", val(lead.completeness_score))}
-        ${row("Dedup Hash", val(lead.dedup_hash))}
-        ${row("Version", val(lead.version))}
-        ${row("Batch ID", val(lead.batch_id))}
-        
-        <!-- Collapsible Raw JSON -->
-        <div style="margin-top: 12px; border-top: 1px solid #222; padding-top: 10px;">
-          <button class="btn btn-ghost" onclick="toggleRawMetadata();" style="width:100%; text-align:left; font-size:11px; padding:6px; margin:0; display:flex; justify-content:space-between;">
-            <span>[+] Raw Metadata (JSON)</span>
-          </button>
-          <pre id="raw-metadata-pre" class="hidden" style="background:#111; padding:8px; border-radius:4px; font-size:10px; color:#aaa; overflow-x:auto; margin-top:8px; text-align:left;">${escHtml(JSON.stringify(data, null, 2))}</pre>
-        </div>
+        ${row("Collection Mode", val(lead.collection_mode))}
+        ${row("Collected At", lead.collected_at ? val(new Date(lead.collected_at).toLocaleString()) : val(null))}
+        ${row("Source Listing URL", lead.listing_url ? `<a href="${lead.listing_url}" target="_blank" style="color:var(--accent); text-decoration:underline; word-break:break-all;">${escHtml(lead.listing_url)}</a>` : val(null))}
       </div>
 
       <!-- Lead Review Actions -->
       <div style="margin-top: 24px; display: flex; gap: 12px; align-items: center; justify-content: flex-end; border-top: 1px solid #222; padding-top: 16px;">
-        <button class="btn btn-primary" onclick="approveLeadFromPanel('${lead.lead_id}')" style="margin: 0; color: #000; font-weight: bold; padding: 8px 16px;">
-          Approve
-        </button>
-        <button class="btn btn-danger" onclick="deleteLeadFromPanel('${lead.lead_id}')" style="margin: 0; background: #ea4335; border: none; color: #fff; font-weight: bold; padding: 8px 16px;">
-          Delete
+        ${!lead.is_approved ? `
+          <button class="btn btn-primary" onclick="approveLeadFromModal('${lead.lead_id}')" style="margin: 0; color: #000; font-weight: bold; padding: 8px 16px;">
+            ✨ Approve to Main Leads
+          </button>
+        ` : `
+          <span style="font-size: 11px; color: #4ade80; font-weight: bold;">✓ In Main Leads Database</span>
+        `}
+        <button class="btn btn-danger" onclick="deleteLeadFromModal('${lead.lead_id}')" style="margin: 0; background: #ea4335; border: none; color: #fff; font-weight: bold; padding: 8px 16px;">
+          Delete Lead
         </button>
         <button class="btn btn-ghost" onclick="document.getElementById('modal-overlay').classList.add('hidden');" style="margin: 0; padding: 8px 16px;">
-          Keep Pending
+          Close
         </button>
       </div>
     `;
@@ -1802,7 +1942,9 @@ async function approveLeadFromPanel(leadId) {
     document.getElementById("modal-overlay").classList.add("hidden");
     
     // Refresh all states
-    await loadWorkspaceLeads();
+    if (currentSelectedCapsule) {
+      await loadWorkspaceLeads();
+    }
     await loadStats();
     await loadLeads();
   } catch (err) {
@@ -1823,7 +1965,9 @@ async function deleteLeadFromPanel(leadId) {
     document.getElementById("modal-overlay").classList.add("hidden");
     
     // Refresh all states
-    await loadWorkspaceLeads();
+    if (currentSelectedCapsule) {
+      await loadWorkspaceLeads();
+    }
     await loadStats();
     await loadLeads();
   } catch (err) {
@@ -1831,9 +1975,57 @@ async function deleteLeadFromPanel(leadId) {
   }
 }
 
+async function updateLeadStatusFromModal(leadId, status) {
+  try {
+    const res = await fetch(`${API_BASE}/leads/${leadId}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: status })
+    });
+    if (res.ok) {
+      if (!document.getElementById("leads-section").classList.contains("hidden")) {
+        loadLeads();
+      }
+    }
+  } catch (err) {
+    console.error("Failed to update status:", err);
+  }
+}
+
+async function saveLeadNotesFromModal(leadId, notes) {
+  try {
+    const res = await fetch(`${API_BASE}/leads/${leadId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: notes })
+    });
+    if (res.ok) {
+      const statusEl = document.getElementById("modal-notes-status");
+      if (statusEl) {
+        statusEl.style.display = "inline";
+        setTimeout(() => { statusEl.style.display = "none"; }, 2000);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to save notes:", err);
+  }
+}
+
+async function approveLeadFromModal(leadId) {
+  await approveLeadFromPanel(leadId);
+}
+
+async function deleteLeadFromModal(leadId) {
+  await deleteLeadFromPanel(leadId);
+}
+
 // Expose these globally
 window.approveLeadFromPanel = approveLeadFromPanel;
 window.deleteLeadFromPanel  = deleteLeadFromPanel;
+window.updateLeadStatusFromModal = updateLeadStatusFromModal;
+window.saveLeadNotesFromModal = saveLeadNotesFromModal;
+window.approveLeadFromModal = approveLeadFromModal;
+window.deleteLeadFromModal = deleteLeadFromModal;
 
 // ============================================================
 // SETTINGS & DIAGNOSTICS SYSTEM
@@ -2335,16 +2527,18 @@ async function init() {
   }
 
   // Listen for background engine state changes to react dynamically
-  chrome.storage.onChanged.addListener(async (changes) => {
-    if (changes.engineState) {
-      const isOnline = await checkBackend();
-      if (isOnline) {
-        // Automatically load stats and refresh leads lists when engine becomes online
-        loadStats();
-        loadLeads();
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener(async (changes) => {
+      if (changes.engineState) {
+        const isOnline = await checkBackend();
+        if (isOnline) {
+          // Automatically load stats and refresh leads lists when engine becomes online
+          loadStats();
+          loadLeads();
+        }
       }
-    }
-  });
+    });
+  }
 
   // Load home by default
   window.location.hash = "home";
@@ -2423,6 +2617,31 @@ async function init() {
     }, 300);
   });
 
+  const wFilterQuality = document.getElementById("workspace-filter-quality");
+  if (wFilterQuality) {
+    wFilterQuality.addEventListener("change", (e) => {
+      workspaceQualityFilter = e.target.value;
+      renderWorkspaceLeads();
+    });
+  }
+
+  const wFilterMode = document.getElementById("workspace-filter-mode");
+  if (wFilterMode) {
+    wFilterMode.addEventListener("change", (e) => {
+      workspaceModeFilter = e.target.value;
+      renderWorkspaceLeads();
+    });
+  }
+
+  const btnApproveAllInCap = document.getElementById("btn-workspace-approve-all");
+  if (btnApproveAllInCap) {
+    btnApproveAllInCap.addEventListener("click", () => {
+      if (currentSelectedCapsule) {
+        approveEntireCapsuleQuick(currentSelectedCapsule);
+      }
+    });
+  }
+
   // Leads filters live listeners
   let searchTimer;
   document.getElementById("filter-search").addEventListener("input", (e) => {
@@ -2439,6 +2658,15 @@ async function init() {
     currentPage = 1;
     loadLeads();
   });
+
+  const filterQuality = document.getElementById("filter-quality");
+  if (filterQuality) {
+    filterQuality.addEventListener("change", (e) => {
+      filters.quality = e.target.value;
+      currentPage = 1;
+      loadLeads();
+    });
+  }
 
   document.getElementById("filter-status").addEventListener("change", (e) => {
     filters.status = e.target.value;
@@ -2460,13 +2688,15 @@ async function init() {
 
   document.getElementById("filter-sort").addEventListener("change", (e) => {
     filters.sort = e.target.value;
-    loadLeads();
+    sortLeads();
+    renderLeadsPage();
   });
 
   document.getElementById("btn-clear-filters").addEventListener("click", () => {
-    filters = { search: "", source: "", status: "", mode: "", city: "", sort: "date-desc" };
+    filters = { search: "", source: "", quality: "", status: "", mode: "", city: "", sort: "date-desc" };
     document.getElementById("filter-search").value  = "";
     document.getElementById("filter-source").value  = "";
+    if (document.getElementById("filter-quality")) document.getElementById("filter-quality").value = "";
     document.getElementById("filter-status").value  = "";
     document.getElementById("filter-mode").value    = "";
     document.getElementById("filter-city").value    = "";
@@ -2498,6 +2728,12 @@ async function init() {
         if (!nameMatch && !phoneMatch && !websiteMatch && !cityMatch && !categoryMatch) return false;
       }
       if (filters.source && lead.source_site !== filters.source) return false;
+      if (filters.quality) {
+        const score = calculateLeadCompleteness(lead);
+        if (filters.quality === "strong" && score < 75) return false;
+        if (filters.quality === "usable" && (score < 50 || score >= 75)) return false;
+        if (filters.quality === "incomplete" && score >= 50) return false;
+      }
       if (filters.status && lead.lead_status !== filters.status) return false;
       if (filters.mode && lead.collection_mode !== filters.mode) return false;
       if (filters.city && lead.city !== filters.city) return false;

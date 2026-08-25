@@ -560,3 +560,34 @@ class DiscoveredListing(SQLModel, table=True):
     discovery_timestamp: datetime = Field(default_factory=datetime.utcnow)
     discovery_source:    str      = Field(default="Quick Collect")
     collection_status:   str      = Field(default="discovered") # discovered / processing / processed / failed / skipped
+
+
+# ==============================================================================
+# TABLE 19 — Schema Version Tracking
+# Versioned migration checkpoint records for safety and upgrades.
+# ==============================================================================
+
+class SchemaVersion(SQLModel, table=True):
+    __tablename__ = "schema_version"
+
+    version_id:    int      = Field(primary_key=True)
+    version_label: str      = Field(default="")
+    description:   str      = Field(default="")
+    applied_at:    datetime = Field(default_factory=datetime.utcnow)
+
+
+# ==============================================================================
+# TABLE 20 — Database Backup History
+# Audit trail of automated and manual database backups.
+# ==============================================================================
+
+class DatabaseBackupLog(SQLModel, table=True):
+    __tablename__ = "database_backup_logs"
+
+    backup_id:     str      = Field(default_factory=generate_uuid, primary_key=True)
+    backup_file:   str      = Field(default="")
+    backup_tag:    str      = Field(default="manual") # auto / manual / pre_restore / pre_migration
+    file_size_kb:  float    = Field(default=0.0)
+    record_count:  int      = Field(default=0)
+    is_valid:      bool     = Field(default=True)
+    created_at:    datetime = Field(default_factory=datetime.utcnow)

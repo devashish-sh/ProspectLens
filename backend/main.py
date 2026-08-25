@@ -30,6 +30,7 @@ from api.routes_adapters import router as adapters_router
 from api.routes_discovery import router as discovery_router
 from api.routes_extraction import router as extraction_router
 from api.routes_ingestion import router as ingestion_router
+from api.routes_backup import router as backup_router
 
 
 # ==============================================================================
@@ -94,6 +95,7 @@ app.include_router(adapters_router, prefix="/api")
 app.include_router(discovery_router, prefix="/api")
 app.include_router(extraction_router, prefix="/api")
 app.include_router(ingestion_router, prefix="/api")
+app.include_router(backup_router, prefix="/api")
 
 
 # ==============================================================================

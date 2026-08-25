@@ -383,6 +383,36 @@ def bulk_delete_leads(req: BulkDeleteRequest, session: Session = Depends(get_ses
     }
 
 
+class BulkApproveRequest(BaseModel):
+    lead_ids: list[str]
+
+@router.post("/leads/bulk-approve")
+def bulk_approve_leads(req: BulkApproveRequest, session: Session = Depends(get_session)):
+    """Approves multiple leads and promotes them to Main Leads."""
+    lead_ids = req.lead_ids
+    if not lead_ids:
+        return {"status": "ok", "message": "No leads specified", "count": 0}
+
+    leads = session.exec(select(Lead).where(Lead.lead_id.in_(lead_ids))).all()
+    for lead in leads:
+        lead.is_approved = True
+        if not lead.lead_status or lead.lead_status == "retrieved":
+            lead.lead_status = "new"
+        session.add(lead)
+    session.commit()
+
+    SyncBroadcaster.broadcast("STATE_UPDATED", {
+        "action": "LEADS_BULK_APPROVED",
+        "lead_ids": lead_ids
+    })
+
+    return {
+        "status": "ok",
+        "message": f"Successfully approved {len(leads)} leads",
+        "count": len(leads)
+    }
+
+
 # ==============================================================================
 # EDIT & PROMOTE ENDPOINTS
 # ==============================================================================

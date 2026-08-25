@@ -2,6 +2,7 @@
 # ProspectLens — SQLite Connection + Session Management + DB Initialization
 
 from sqlmodel import SQLModel, Session, create_engine, text, select
+from sqlalchemy import event
 from pathlib import Path
 
 # ==============================================================================
@@ -25,22 +26,39 @@ DB_PATH = DB_DIR / "prospectlens.db"
 DB_URL  = f"sqlite:///{DB_PATH}"
 
 # ==============================================================================
-# ENGINE
-# connect_args check_same_thread=False is required for FastAPI
-# because FastAPI handles requests across multiple threads
+# ENGINE & SQLITE OPTIMIZATIONS (WAL MODE, PRAGMAS, TIMEOUT)
 # ==============================================================================
 
 engine = create_engine(
     DB_URL,
-    echo=False,                                  # Set True temporarily if you want to see SQL queries
-    connect_args={"check_same_thread": False}
+    echo=False,
+    connect_args={"check_same_thread": False, "timeout": 15.0}
 )
 
 
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    """
+    Applies SQLite production hardening pragmas:
+    - journal_mode = WAL (Write-Ahead Logging for maximum concurrency)
+    - synchronous = NORMAL (Safe in WAL mode, dramatic write speedup)
+    - busy_timeout = 10000 (10s wait before busy/locking error)
+    - cache_size = -64000 (64MB memory cache for fast reads)
+    - temp_store = MEMORY (In-memory temporary tables & sorts)
+    - foreign_keys = ON (Enforce foreign key constraints)
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode = WAL;")
+    cursor.execute("PRAGMA synchronous = NORMAL;")
+    cursor.execute("PRAGMA busy_timeout = 10000;")
+    cursor.execute("PRAGMA cache_size = -64000;")
+    cursor.execute("PRAGMA temp_store = MEMORY;")
+    cursor.execute("PRAGMA foreign_keys = ON;")
+    cursor.close()
+
+
 # ==============================================================================
-# CREATE ALL TABLES
-# Call this once on backend startup — safe to call multiple times,
-# it will NOT drop existing tables or delete any data
+# CREATE ALL TABLES & RUN MIGRATIONS
 # ==============================================================================
 
 def create_db_and_tables():
@@ -60,7 +78,8 @@ def create_db_and_tables():
         ExportHistory, VisitedURL, SourceRecord,
         Note, User, Tag, LeadTag,
         WebsiteSource, DataCapsule, SearchHistory, LeadHistory,
-        LeadVersionHistory, CollectionError, SearchContext, DiscoveredListing
+        LeadVersionHistory, CollectionError, SearchContext, DiscoveredListing,
+        SchemaVersion, DatabaseBackupLog
     )
     SQLModel.metadata.create_all(engine)
 
@@ -246,6 +265,21 @@ def create_db_and_tables():
                 except Exception as e:
                     session.rollback()
                     print(f"[DB] Migration failed for collection_batches column {col_name}: {e}")
+
+    # Run versioned migrations, composite index creation, and integrity verification
+    try:
+        from database.migrations import run_database_migrations
+        run_database_migrations(engine)
+    except Exception as e:
+        print(f"[DB] Migration execution note: {e}")
+
+    # Trigger automatic startup safety backup if database has existing data
+    try:
+        from database.backup import create_database_backup, get_sqlite_lead_count
+        if DB_PATH.exists() and get_sqlite_lead_count(DB_PATH) > 0:
+            create_database_backup(tag="auto_startup", max_retained=5)
+    except Exception as e:
+        print(f"[DB] Startup backup note: {e}")
                 
     print(f"[DB] Database ready at: {DB_PATH}")
 

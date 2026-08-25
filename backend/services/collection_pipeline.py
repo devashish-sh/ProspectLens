@@ -145,11 +145,22 @@ class CollectionPipeline:
                 "lead_id": existing_id
             }
 
-        # Step 3.5: Validate that batch source_site matches lead source_site to keep capsules isolated
+        # Step 3.5: Validate and ensure batch exists to satisfy foreign key integrity
         batch_id = lead_data.get("batch_id")
         if batch_id:
             batch = session.get(CollectionBatch, batch_id)
-            if batch and batch.source_site != lead_data.get("source_site"):
+            if not batch:
+                # Create on-the-fly collection batch record if not present
+                batch = CollectionBatch(
+                    batch_id=batch_id,
+                    batch_name=f"{lead_data.get('source_site', 'Manual').title()} Batch",
+                    source_site=lead_data.get("source_site", "googlemaps"),
+                    collection_mode=lead_data.get("collection_mode", "quick"),
+                    status="running"
+                )
+                session.add(batch)
+                session.flush()
+            elif batch.source_site != lead_data.get("source_site"):
                 return {
                     "status": "error",
                     "message": f"Source site mismatch: Lead from '{lead_data.get('source_site')}' cannot be mixed into batch/capsule '{batch.source_site}'",

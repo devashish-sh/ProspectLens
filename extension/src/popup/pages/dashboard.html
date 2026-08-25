@@ -325,6 +325,12 @@
         <option value="justdial">Justdial</option>
         <option value="tradeindia">TradeIndia</option>
       </select>
+      <select class="f-select" id="filter-quality">
+        <option value="">All Quality</option>
+        <option value="strong">🟢 Strong (≥75%)</option>
+        <option value="usable">🟡 Usable (50-74%)</option>
+        <option value="incomplete">🔴 Incomplete (&lt;50%)</option>
+      </select>
       <select class="f-select" id="filter-status">
         <option value="">All Status</option>
         <option value="new">New</option>
@@ -341,6 +347,7 @@
       <select class="f-select" id="filter-sort">
         <option value="date-desc">Newest First</option>
         <option value="date-asc">Oldest First</option>
+        <option value="quality-desc">Quality: High to Low</option>
         <option value="name-asc">Name A-Z</option>
         <option value="name-desc">Name Z-A</option>
       </select>
@@ -388,36 +395,63 @@
       </div>
     </div>
 
-    <!-- COLLECTIONS TABLE -->
     <!-- COLLECTIONS WORKSPACE (DATA CAPSULES) -->
     <div class="hidden" id="batches-section" style="width: 100%;">
       
       <!-- 1. CAPSULES LIST GRID VIEW -->
       <div id="capsules-grid-view" style="width: 100%;">
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; width: 100%;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; width: 100%;">
           <!-- Google Maps Capsule -->
-          <div class="export-card capsule-card" data-source="googlemaps" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
-            <div class="export-icon" style="font-size: 24px;">🗺️</div>
-            <div class="export-name" style="font-size: 13px; font-weight: 700; color: var(--text);">Google Maps</div>
-            <div class="export-desc" id="dash-cap-googlemaps-details" style="font-size: 11px; color: var(--text-muted);">0 Leads • Waiting</div>
+          <div class="export-card capsule-card" data-source="googlemaps" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="export-icon" style="font-size: 28px; margin: 0;">🗺️</div>
+              <span class="source-badge source-googlemaps">Google Maps</span>
+            </div>
+            <div class="export-name" style="font-size: 14px; font-weight: 700; color: var(--text); margin: 4px 0 0;">Google Maps</div>
+            <div class="export-desc" id="dash-cap-googlemaps-details" style="font-size: 11px; color: var(--text-muted); padding: 0; margin: 0;">0 Leads • Waiting</div>
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+              <button class="btn btn-ghost" style="flex: 1; padding: 4px 8px; font-size: 11px;">Review</button>
+              <button class="btn btn-primary" onclick="event.stopPropagation(); approveEntireCapsuleQuick('googlemaps');" style="padding: 4px 8px; font-size: 11px; color: #000; font-weight: bold;">Approve All</button>
+            </div>
           </div>
           <!-- IndiaMART Capsule -->
-          <div class="export-card capsule-card" data-source="indiamart" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
-            <div class="export-icon" style="font-size: 24px;">🏭</div>
-            <div class="export-name" style="font-size: 13px; font-weight: 700; color: var(--text);">IndiaMART</div>
-            <div class="export-desc" id="dash-cap-indiamart-details" style="font-size: 11px; color: var(--text-muted);">0 Leads • Waiting</div>
+          <div class="export-card capsule-card" data-source="indiamart" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="export-icon" style="font-size: 28px; margin: 0;">🏭</div>
+              <span class="source-badge source-indiamart">IndiaMART</span>
+            </div>
+            <div class="export-name" style="font-size: 14px; font-weight: 700; color: var(--text); margin: 4px 0 0;">IndiaMART</div>
+            <div class="export-desc" id="dash-cap-indiamart-details" style="font-size: 11px; color: var(--text-muted); padding: 0; margin: 0;">0 Leads • Waiting</div>
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+              <button class="btn btn-ghost" style="flex: 1; padding: 4px 8px; font-size: 11px;">Review</button>
+              <button class="btn btn-primary" onclick="event.stopPropagation(); approveEntireCapsuleQuick('indiamart');" style="padding: 4px 8px; font-size: 11px; color: #000; font-weight: bold;">Approve All</button>
+            </div>
           </div>
           <!-- Justdial Capsule -->
-          <div class="export-card capsule-card" data-source="justdial" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
-            <div class="export-icon" style="font-size: 24px;">📞</div>
-            <div class="export-name" style="font-size: 13px; font-weight: 700; color: var(--text);">Justdial</div>
-            <div class="export-desc" id="dash-cap-justdial-details" style="font-size: 11px; color: var(--text-muted);">0 Leads • Waiting</div>
+          <div class="export-card capsule-card" data-source="justdial" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="export-icon" style="font-size: 28px; margin: 0;">📞</div>
+              <span class="source-badge source-justdial">Justdial</span>
+            </div>
+            <div class="export-name" style="font-size: 14px; font-weight: 700; color: var(--text); margin: 4px 0 0;">Justdial</div>
+            <div class="export-desc" id="dash-cap-justdial-details" style="font-size: 11px; color: var(--text-muted); padding: 0; margin: 0;">0 Leads • Waiting</div>
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+              <button class="btn btn-ghost" style="flex: 1; padding: 4px 8px; font-size: 11px;">Review</button>
+              <button class="btn btn-primary" onclick="event.stopPropagation(); approveEntireCapsuleQuick('justdial');" style="padding: 4px 8px; font-size: 11px; color: #000; font-weight: bold;">Approve All</button>
+            </div>
           </div>
           <!-- TradeIndia Capsule -->
-          <div class="export-card capsule-card" data-source="tradeindia" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px;">
-            <div class="export-icon" style="font-size: 24px;">📦</div>
-            <div class="export-name" style="font-size: 13px; font-weight: 700; color: var(--text);">TradeIndia</div>
-            <div class="export-desc" id="dash-cap-tradeindia-details" style="font-size: 11px; color: var(--text-muted);">0 Leads • Waiting</div>
+          <div class="export-card capsule-card" data-source="tradeindia" style="cursor: pointer; display: flex; flex-direction: column; gap: 8px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="export-icon" style="font-size: 28px; margin: 0;">📦</div>
+              <span class="source-badge source-tradeindia">TradeIndia</span>
+            </div>
+            <div class="export-name" style="font-size: 14px; font-weight: 700; color: var(--text); margin: 4px 0 0;">TradeIndia</div>
+            <div class="export-desc" id="dash-cap-tradeindia-details" style="font-size: 11px; color: var(--text-muted); padding: 0; margin: 0;">0 Leads • Waiting</div>
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+              <button class="btn btn-ghost" style="flex: 1; padding: 4px 8px; font-size: 11px;">Review</button>
+              <button class="btn btn-primary" onclick="event.stopPropagation(); approveEntireCapsuleQuick('tradeindia');" style="padding: 4px 8px; font-size: 11px; color: #000; font-weight: bold;">Approve All</button>
+            </div>
           </div>
         </div>
       </div>
@@ -431,16 +465,24 @@
             <h2 id="workspace-source-name" style="font-size: 18px; font-weight: 700; color: var(--text); margin: 0;">Google Maps Workspace</h2>
             <span id="workspace-pending-count" class="source-badge" style="padding: 4px 10px; font-size: 11px; font-weight: bold; background: rgba(74, 222, 128, 0.15); color: #4ade80; border-radius: 4px;">0 Pending Leads</span>
           </div>
+          <div>
+            <button class="btn btn-primary" id="btn-workspace-approve-all" style="padding: 6px 14px; margin: 0; color: #000; font-weight: bold;">Approve All in Capsule</button>
+          </div>
         </div>
 
         <!-- Search, Filter & Sort Bar -->
-        <div style="display: flex; gap: 12px; align-items: center; width: 100%;">
-          <input type="text" id="workspace-search" placeholder="Search by business name..." style="flex: 1; padding: 8px 12px; background: #111; border: 1px solid #222; color: #fff; border-radius: 4px; font-size: 12px;" />
-          <select disabled style="padding: 8px 12px; background: #111; border: 1px solid #222; color: #666; border-radius: 4px; font-size: 12px; cursor: not-allowed; margin: 0;">
-            <option>Filters (Placeholder)</option>
+        <div style="display: flex; gap: 12px; align-items: center; width: 100%; flex-wrap: wrap;">
+          <input type="text" id="workspace-search" placeholder="Search by business name, category, city..." style="flex: 1; min-width: 200px; padding: 8px 12px; background: #111; border: 1px solid #222; color: #fff; border-radius: 4px; font-size: 12px;" />
+          <select id="workspace-filter-quality" class="f-select" style="padding: 8px 12px; background: #111; border: 1px solid #222; color: #fff; border-radius: 4px; font-size: 12px; margin: 0;">
+            <option value="">All Quality Levels</option>
+            <option value="strong">🟢 Strong (≥75%)</option>
+            <option value="usable">🟡 Usable (50-74%)</option>
+            <option value="incomplete">🔴 Incomplete (&lt;50%)</option>
           </select>
-          <select disabled style="padding: 8px 12px; background: #111; border: 1px solid #222; color: #666; border-radius: 4px; font-size: 12px; cursor: not-allowed; margin: 0;">
-            <option>Sort (Placeholder)</option>
+          <select id="workspace-filter-mode" class="f-select" style="padding: 8px 12px; background: #111; border: 1px solid #222; color: #fff; border-radius: 4px; font-size: 12px; margin: 0;">
+            <option value="">All Collection Modes</option>
+            <option value="quick">Quick Collect</option>
+            <option value="deep">Deep Collect</option>
           </select>
         </div>
 
@@ -467,9 +509,9 @@
                 <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Location</th>
                 <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Phone</th>
                 <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Website</th>
-                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Collection Time</th>
+                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Mode</th>
                 <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Quality</th>
-                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Status</th>
+                <th style="padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Actions</th>
               </tr>
             </thead>
             <tbody id="workspace-leads-tbody">
