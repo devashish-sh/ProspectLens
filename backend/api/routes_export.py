@@ -23,8 +23,12 @@ from database.models import Lead, Contact, ExportHistory
 
 router = APIRouter(tags=["Export"])
 
-# Exports are saved here inside the backend folder
-EXPORTS_DIR = Path(__file__).parent.parent / "assets" / "exports"
+# Exports are saved in a writeable user-data directory
+local_app_data = os.getenv("LOCALAPPDATA")
+if local_app_data:
+    EXPORTS_DIR = Path(local_app_data) / "ProspectLens" / "exports"
+else:
+    EXPORTS_DIR = Path.home() / "Downloads" / "ProspectLens"
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 

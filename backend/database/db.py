@@ -10,7 +10,17 @@ from pathlib import Path
 # This single file IS the entire database — back it up to back up all your data
 # ==============================================================================
 
-DB_DIR  = Path(__file__).parent.parent          # points to backend/
+import os
+from pathlib import Path
+
+# Compute user data directory in %LOCALAPPDATA% on Windows
+local_app_data = os.environ.get("LOCALAPPDATA")
+if local_app_data:
+    USER_DATA_DIR = Path(local_app_data) / "ProspectLens"
+else:
+    USER_DATA_DIR = Path.home() / "AppData" / "Local" / "ProspectLens"
+
+DB_DIR  = USER_DATA_DIR / "data"
 DB_PATH = DB_DIR / "prospectlens.db"
 DB_URL  = f"sqlite:///{DB_PATH}"
 

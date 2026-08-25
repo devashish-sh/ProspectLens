@@ -5,6 +5,7 @@ import struct
 import subprocess
 import os
 import urllib.request
+from pathlib import Path
 
 # Read a message from stdin and decode it.
 def read_message():
@@ -41,23 +42,42 @@ def main():
         action = msg.get("action")
         
         if action == "start":
-            launcher_path = msg.get("launcher_path")
-            if not launcher_path or not os.path.exists(launcher_path):
-                send_message({"status": "error", "message": "Backend launcher not found"})
-                continue
-                
             if is_server_port_active():
                 send_message({"status": "success", "message": "Server already active"})
                 continue
                 
+            # Dynamic launch lookup:
+            # 1. Look for ProspectLens.exe in the same directory as this launcher
+            # When frozen by PyInstaller, __file__ resolves to temp extraction dir,
+            # so we must use sys.executable to find the actual .exe location.
+            if getattr(sys, 'frozen', False):
+                current_dir = Path(sys.executable).resolve().parent
+            else:
+                current_dir = Path(__file__).resolve().parent
+            prod_engine_exe = current_dir / "ProspectLens.exe"
+            
             try:
-                # Start detached process
-                subprocess.Popen(
-                    ["cmd.exe", "/c", launcher_path],
-                    cwd=os.path.dirname(launcher_path),
-                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-                )
-                send_message({"status": "success", "message": "Backend start initiated"})
+                if prod_engine_exe.exists():
+                    # Production mode: Launch ProspectLens.exe directly
+                    subprocess.Popen(
+                        [str(prod_engine_exe)],
+                        cwd=str(current_dir),
+                        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                    )
+                    send_message({"status": "success", "message": "Backend start initiated (Production Mode)"})
+                else:
+                    # Development mode: Fall back to start.bat launcher_path
+                    launcher_path = msg.get("launcher_path")
+                    if not launcher_path or not os.path.exists(launcher_path):
+                        send_message({"status": "error", "message": f"Backend launcher not found (Searched: {prod_engine_exe} and {launcher_path})"})
+                        continue
+                        
+                    subprocess.Popen(
+                        ["cmd.exe", "/c", launcher_path],
+                        cwd=os.path.dirname(launcher_path),
+                        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                    )
+                    send_message({"status": "success", "message": "Backend start initiated (Development Fallback)"})
             except Exception as e:
                 send_message({"status": "error", "message": str(e)})
                 

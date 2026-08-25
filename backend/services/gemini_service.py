@@ -28,9 +28,26 @@ except ImportError:
 
 MODEL = "gemini-2.0-flash"
 
+def _get_api_key() -> Optional[str]:
+    # 1. Try loading from %LOCALAPPDATA%\ProspectLens\config\settings.json
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        config_path = Path(local_app_data) / "ProspectLens" / "config" / "settings.json"
+        if config_path.exists():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config_data = json.load(f)
+                    key = config_data.get("GEMINI_API_KEY")
+                    if key:
+                        return key
+            except Exception as e:
+                print(f"[GeminiService] Error reading settings.json: {e}")
+    # 2. Fallback to env variable
+    return os.getenv("GEMINI_API_KEY")
+
 def _get_client():
     """Returns initialized genai Client, or None if key is missing/invalid."""
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = _get_api_key()
     if not api_key or not GEMINI_AVAILABLE:
         return None
     try:

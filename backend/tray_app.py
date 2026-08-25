@@ -6,12 +6,70 @@
 
 import os
 import sys
+import time
+from pathlib import Path
+
+# Setup logging directory and file redirect immediately to prevent crashes on sys.stdout/sys.stderr being None in windowless mode
+def get_log_file():
+    paths_to_try = []
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        paths_to_try.append(Path(local_app_data) / "ProspectLens" / "logs" / "engine.log")
+    user_profile = os.environ.get("USERPROFILE")
+    if user_profile:
+        paths_to_try.append(Path(user_profile) / "AppData" / "Local" / "ProspectLens" / "logs" / "engine.log")
+    try:
+        paths_to_try.append(Path.home() / "AppData" / "Local" / "ProspectLens" / "logs" / "engine.log")
+    except Exception:
+        pass
+    try:
+        import tempfile
+        paths_to_try.append(Path(tempfile.gettempdir()) / "ProspectLens" / "engine.log")
+    except Exception:
+        pass
+    for p in paths_to_try:
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with open(p, "a", encoding="utf-8") as f:
+                f.write("")
+            return p
+        except Exception:
+            continue
+    return None
+
+class SafeWriter:
+    def __init__(self, file_path):
+        self.file = None
+        if file_path:
+            try:
+                self.file = open(file_path, "a", encoding="utf-8", buffering=1)
+            except Exception:
+                pass
+    def write(self, data):
+        if self.file:
+            try:
+                self.file.write(data)
+            except Exception:
+                pass
+    def flush(self):
+        if self.file:
+            try:
+                self.file.flush()
+            except Exception:
+                pass
+
+log_file = get_log_file()
+safe_writer = SafeWriter(log_file)
+sys.stdout = safe_writer
+sys.stderr = safe_writer
+print(f"\n--- ProspectLens Log Started: {time.strftime('%Y-%m-%d %H:%M:%S')} ---")
+
+# Now import other modules safely after stdout/stderr redirection
 import subprocess
 import webbrowser
-import time
 import urllib.request
 import urllib.error
-from pathlib import Path
+import threading
 from PIL import Image
 import pystray
 from pystray import MenuItem as item
@@ -26,17 +84,41 @@ VENV_PYTHON = ROOT_DIR / "venv" / "Scripts" / "python.exe"
 if not VENV_PYTHON.exists():
     VENV_PYTHON = sys.executable
 
-# Global subprocess reference
-server_process = None
+# Global server references
+server_instance = None
+server_thread = None
 tray_icon = None
 
+import uvicorn
+class ProgrammaticServer(uvicorn.Server):
+    def install_signal_handlers(self):
+        pass
+
 def get_icon_image():
-    """Loads the rebranded icon or creates a fallback pillow image if missing."""
-    if ICON_PATH.exists():
-        try:
-            return Image.open(ICON_PATH)
-        except Exception as e:
-            print(f"Error loading icon image: {e}")
+    """Loads the branded ProspectLens icon or creates a fallback pillow image if missing."""
+    possible_paths = []
+    
+    # 1. PyInstaller bundled resources
+    if getattr(sys, 'frozen', False):
+        if hasattr(sys, '_MEIPASS'):
+            possible_paths.append(Path(sys._MEIPASS) / "icons" / "icon32.png")
+            possible_paths.append(Path(sys._MEIPASS) / "icons" / "icon128.png")
+        possible_paths.append(Path(sys.executable).parent / "_internal" / "icons" / "icon32.png")
+        possible_paths.append(Path(sys.executable).parent / "icons" / "icon32.png")
+    
+    # 2. Local project directories
+    possible_paths.append(ROOT_DIR / "icons" / "icon32.png")
+    possible_paths.append(ROOT_DIR / "icons" / "icon128.png")
+    possible_paths.append(ICON_PATH)
+    possible_paths.append(PROJECT_ROOT / "extension" / "icons" / "icon32.png")
+    possible_paths.append(PROJECT_ROOT / "extension" / "icons" / "icon128.png")
+
+    for p in possible_paths:
+        if p and p.exists():
+            try:
+                return Image.open(p)
+            except Exception as e:
+                print(f"Error loading icon image from {p}: {e}")
             
     # Fallback placeholder image
     img = Image.new("RGBA", (32, 32), color=(31, 32, 31, 255))
@@ -54,60 +136,49 @@ def is_server_port_active() -> bool:
         return False
 
 def is_server_running() -> bool:
-    """Returns True if the uvicorn subprocess is alive or the port is already active."""
-    global server_process
-    if server_process and server_process.poll() is None:
+    """Returns True if the uvicorn thread is active or the port is already active."""
+    global server_instance
+    if server_instance and not server_instance.should_exit:
         return True
     return is_server_port_active()
 
 def start_server():
-    """Spins up uvicorn server in a subprocess."""
-    global server_process
+    """Spins up uvicorn server programmatically in a daemon thread."""
+    global server_instance, server_thread
     if is_server_running():
         print("Server is already running.")
         return
 
-    print("Starting uvicorn server...")
+    print("Starting programmatic uvicorn server...")
     
-    # Run uvicorn using the virtualenv python interpreter
-    # Port 8000 matches all popup.js/dashboard.js config
-    command = [
-        str(VENV_PYTHON),
-        "-m", "uvicorn",
-        "main:app",
-        "--host", "127.0.0.1",
-        "--port", "8000"
-    ]
+    # Ensure root directory is in sys.path
+    sys.path.insert(0, str(ROOT_DIR))
+    from main import app
+    
+    config = uvicorn.Config(
+        app,
+        host="127.0.0.1",
+        port=8000,
+        log_level="info",
+        log_config=None
+    )
     
     try:
-        # Start uvicorn with stdout/stderr hidden to avoid console windows popping up on Windows
-        startupinfo = None
-        if os.name == 'nt':
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
-
-        server_process = subprocess.Popen(
-            command,
-            cwd=str(ROOT_DIR),
-            startupinfo=startupinfo
-        )
-        print(f"Uvicorn server spawned (PID: {server_process.pid})")
+        server_instance = ProgrammaticServer(config=config)
+        server_thread = threading.Thread(target=server_instance.run, daemon=True)
+        server_thread.start()
+        print("Programmatic Uvicorn server thread started successfully.")
     except Exception as e:
-        print(f"Failed to start server: {e}")
+        print(f"Failed to start programmatic server: {e}")
 
 def stop_server():
-    """Terminates uvicorn server subprocess."""
-    global server_process
-    if server_process:
-        print("Stopping spawned uvicorn server...")
-        if os.name == 'nt':
-            # Force terminate subprocess tree on Windows
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(server_process.pid)], capture_output=True)
-        else:
-            server_process.terminate()
-        server_process = None
-        print("Uvicorn server stopped.")
+    """Terminates programmatically run uvicorn server."""
+    global server_instance
+    if server_instance:
+        print("Stopping programmatic uvicorn server...")
+        server_instance.should_exit = True
+        server_instance = None
+        print("Uvicorn server stop requested.")
     else:
         # If the server is running on the port but was not spawned in this session,
         # request shutdown via the shutdown API.
