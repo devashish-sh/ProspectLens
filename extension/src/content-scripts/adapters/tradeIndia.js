@@ -11,65 +11,61 @@ class TradeIndiaAdapter extends BaseAdapter {
   }
 
   findListingCards() {
-    const getListingAnchors = () => {
-      const anchors = new Set();
-      const selectors = ".co-name, .company_name, .seller-name, a[href*='/Seller-'], a[href*='tradeindia.com/Seller-'], a[href*='/suppliers/'], a[href*='/company/'], .catalog-title, .product-title, .featured-seller, .product-card, .catalog-card, .list_items, [class*='seller_name']";
-      document.querySelectorAll(selectors).forEach(el => anchors.add(el));
-      
-      const elms = document.querySelectorAll("button, a, div, span, input[type='button']");
-      elms.forEach(el => {
-        const txt = el.textContent?.trim()?.toLowerCase() || "";
-        const val = el.value?.trim()?.toLowerCase() || "";
-        if (
-          txt.includes("contact supplier") || val.includes("contact supplier") ||
-          txt.includes("contact seller") || val.includes("contact seller") ||
-          txt.includes("send inquiry") || val.includes("send inquiry") ||
-          txt.includes("get best quote") || val.includes("get best quote") ||
-          txt.includes("view mobile number") || val.includes("view number") ||
-          txt.includes("call now") || val.includes("call now")
-        ) {
+    const rawCards = document.querySelectorAll(
+      ".product-info-cnt, .responsive-card, .product-details, .ilcl-listing-cont, .fullwidthcard, [class*='product-info-cnt'], [class*='responsive-card'], [class*='fullwidthcard']"
+    );
+    
+    const validCards = [];
+    rawCards.forEach(card => {
+      if (!card.closest("header") && !card.closest("nav") && !card.closest("footer")) {
+        if (card.innerText && card.innerText.length > 30 && card.innerText.length < 2000) {
+          validCards.push(card);
+        }
+      }
+    });
+
+    if (validCards.length > 0) {
+      return DOMHelpers.filterUniqueCards(validCards);
+    }
+
+    // Fallback: search for cards via action triggers
+    const anchors = new Set();
+    const elms = document.querySelectorAll("button, a, div, span, p");
+    elms.forEach(el => {
+      const txt = el.textContent?.trim()?.toLowerCase() || "";
+      if (
+        txt === "view number" || txt === "send inquiry" ||
+        txt === "contact seller" || txt === "get best price" ||
+        txt === "trusted seller" || txt === "contact supplier" ||
+        txt === "get best quote" || txt.includes("inquiries only")
+      ) {
+        if (!el.closest("header") && !el.closest("nav") && !el.closest("footer")) {
           anchors.add(el);
         }
-      });
-      
-      return Array.from(anchors);
-    };
+      }
+    });
 
-    const anchors = getListingAnchors();
     const cardsSet = new Set();
-    
     anchors.forEach(el => {
-      let parent = el.parentElement;
-      let found = false;
-      
-      for (let depth = 0; depth < 7 && parent; depth++) {
-        if (parent.tagName === "BODY" || parent.tagName === "HTML" || parent.id === "main-wrapper") {
-          break;
-        }
-        
+      let parent = el;
+      for (let depth = 0; depth < 8 && parent; depth++) {
+        if (parent.tagName === "BODY" || parent.tagName === "HTML") break;
         const cls = parent.className || "";
         const classStr = typeof cls === "string" ? cls.toLowerCase() : "";
-        
         if (
           classStr.includes("card") || 
-          classStr.includes("item") || 
-          classStr.includes("listing") ||
-          classStr.includes("seller") ||
-          classStr.includes("catalog") ||
-          classStr.includes("product") ||
+          classStr.includes("product") || 
+          classStr.includes("listing") || 
+          classStr.includes("item") ||
           parent.tagName === "LI" ||
-          parent.tagName === "SECTION" ||
           parent.tagName === "ARTICLE"
         ) {
-          cardsSet.add(parent);
-          found = true;
-          break;
+          if (parent.innerText && parent.innerText.length > 30 && parent.innerText.length < 2000) {
+            cardsSet.add(parent);
+            break;
+          }
         }
         parent = parent.parentElement;
-      }
-      
-      if (!found && el.parentElement && el.parentElement.parentElement) {
-        cardsSet.add(el.parentElement.parentElement.parentElement || el.parentElement.parentElement);
       }
     });
 
@@ -77,14 +73,34 @@ class TradeIndiaAdapter extends BaseAdapter {
   }
 
   extractLead(card, batchId, mode) {
-    // Extract Business Name
-    const nameSelector = ".co-name, .company_name, .seller-name, a[href*='Seller-'], [class*='company_name'], [class*='seller_name'], h2 a, h3 a, h2, h3";
+    // Extract Business / Seller Name
+    let name = "";
+    
+    // 1. Direct class selectors
+    const nameSelector = ".co-name, .company_name, .seller-name, .listing-link, [class*='seller_name'], [class*='company_name'], h2 a, h3 a, h2, h3";
     const nameEl = card.querySelector(nameSelector);
-    let name = nameEl?.textContent?.trim() || "";
+    if (nameEl) {
+      name = nameEl.textContent?.trim() || "";
+    }
+    
+    // 2. Scan text lines for seller / company name
     if (!name) {
-      const headerEl = card.querySelector("strong a, b a, strong, b");
-      if (headerEl) {
-        name = headerEl.textContent?.trim() || "";
+      const textLines = (card.innerText || "").split("\n").map(l => l.trim()).filter(l => l.length > 2 && l.length < 80);
+      for (const line of textLines) {
+        const lower = line.toLowerCase();
+        if (
+          !lower.includes("made in india") &&
+          !lower.includes("price:") &&
+          !lower.includes("moq") &&
+          !lower.includes("inquiry") &&
+          !lower.includes("view number") &&
+          !lower.includes("trusted seller") &&
+          !lower.includes("get best quote") &&
+          !lower.includes("years")
+        ) {
+          name = line;
+          break;
+        }
       }
     }
 
@@ -93,22 +109,35 @@ class TradeIndiaAdapter extends BaseAdapter {
     name = Normalizer.cleanBusinessName(name);
 
     if (!Validator.isValidBusinessName(name)) {
-      Logger.warn(`[TradeIndiaAdapter] Skipped card: invalid name "${name}"`);
-      return null;
+      name = name.replace(/^(verified|trusted|leading|top)\s+/i, "").trim();
+      if (!Validator.isValidBusinessName(name)) {
+        Logger.warn(`[TradeIndiaAdapter] Skipped card: invalid name "${name}"`);
+        return null;
+      }
     }
 
     // Address & City
-    const addrSelector = ".location, .city, .address, .seller-location, [class*='location'], [class*='address'], .city-name";
-    const addrEl = card.querySelector(addrSelector);
-    const address = addrEl?.textContent?.trim() || "";
+    let address = "";
+    const addrEl = card.querySelector(".location, .city, .address, .seller-location, [class*='location'], [class*='city']");
+    if (addrEl) {
+      address = addrEl.textContent?.trim() || "";
+    }
+    if (!address) {
+      const cardText = card.innerText || "";
+      const cityMatch = cardText.match(/\b(Delhi|New Delhi|Noida|Gurugram|Gurgaon|Faridabad|Ghaziabad|Mumbai|Pune|Bengaluru|Bangalore|Hyderabad|Chennai|Kolkata|Ahmedabad|Surat|Jaipur|Lucknow|Kanpur|Indore|Bhopal|Chandigarh|Ludhiana|Agra|Nagpur|Vadodara|Patna|Coimbatore)\b/i);
+      if (cityMatch) {
+        address = cityMatch[0];
+      }
+    }
 
     // Listing URL
-    const linkSelector = "a[href*='tradeindia.com/Seller-'], a[href*='/Seller-'], a[href*='/company/'], a[href*='/suppliers/']";
+    const linkSelector = "a[href*='tradeindia.com/products/'], a[href*='/products/'], a[href*='tradeindia.com/Seller-'], a[href*='/Seller-'], a[href*='/company/']";
     const linkEl = card.querySelector(linkSelector) || card.querySelector("a") || card.closest("a");
     const listingUrl = linkEl?.href || window.location.href;
 
-    // Category
-    const category = document.querySelector("h1, .keyword, [class*='breadcrumb'] strong")?.textContent?.trim() || "";
+    // Category / Product
+    const prodEl = card.querySelector(".product-title--desc, h2, h3, a[href*='/products/'], .product-title");
+    const category = prodEl?.textContent?.trim() || document.querySelector("h1, .keyword")?.textContent?.trim() || "";
 
     // Contacts
     const contacts = this.extractContacts(card);
@@ -137,14 +166,19 @@ class TradeIndiaAdapter extends BaseAdapter {
     const panelText = panel.textContent || "";
 
     // 1. Business Name
-    const nameEl = panel.querySelector(".co-name, .company_name, .seller-name, h1, h2, [class*='company_name']");
+    const nameEl = panel.querySelector(".co-name, .company_name, .seller-name, .listing-link, h1, h2, [class*='company_name']");
     if (nameEl) {
       result.business_name = Normalizer.cleanBusinessName(nameEl.textContent?.trim() || "");
     }
 
     // 2. Address & Location
     const addrEl = panel.querySelector(".location, .city, .address, .seller-location, [class*='location'], [class*='address']");
-    const address = addrEl?.textContent?.trim() || "";
+    let address = addrEl?.textContent?.trim() || "";
+    if (!address) {
+      const cityMatch = panelText.match(/\b(Delhi|New Delhi|Noida|Gurugram|Gurgaon|Faridabad|Ghaziabad|Mumbai|Pune|Bengaluru|Bangalore|Hyderabad|Chennai|Kolkata|Ahmedabad|Surat|Jaipur|Lucknow)\b/i);
+      if (cityMatch) address = cityMatch[0];
+    }
+
     if (address) {
       result.address = address;
       const pinMatch = address.match(/\b([1-9][0-9]{5})\b/);
@@ -189,13 +223,13 @@ class TradeIndiaAdapter extends BaseAdapter {
     }
 
     // 5. TrustStamp & Verification
-    if (panelText.includes("Trust Stamp") || panelText.includes("Super Seller") || panelText.includes("Verified Supplier") || panelText.includes("Verified")) {
-      result.flexible_metadata.verified_status = "Trust Stamp Verified";
+    if (panelText.includes("Trust") || panelText.includes("Super Seller") || panelText.includes("Verified Supplier") || panelText.includes("Verified") || panelText.includes("ti-stamp")) {
+      result.flexible_metadata.verified_status = "Trusted Seller";
     }
 
-    const yearMatch = panelText.match(/Member Since\s*[:\-]?\s*(\d{4})|Established\s*[:\-]?\s*(\d{4})|Year of Est\.\s*[:\-]?\s*(\d{4})/i);
+    const yearMatch = panelText.match(/(\d+)\s*Years?/i) || panelText.match(/Member Since\s*[:\-]?\s*(\d{4})|Established\s*[:\-]?\s*(\d{4})/i);
     if (yearMatch) {
-      result.flexible_metadata.established_year = yearMatch[1] || yearMatch[2] || yearMatch[3];
+      result.flexible_metadata.established_year = yearMatch[1];
     }
 
     const gstMatch = panelText.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}\b/);

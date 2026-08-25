@@ -11,16 +11,39 @@ class JustdialAdapter extends BaseAdapter {
   }
 
   findListingCards() {
-    const cardsRaw = document.querySelectorAll(
-      ".resultbox_info, .store-details, [class*='resultbox'], .jsx-3473191726"
+    const rawCards = document.querySelectorAll(
+      ".resultbox_left, .resultbox_info, .store-details, [class*='resultbox_left'], [class*='store-details'], [class*='resultbox_title']"
     );
-    return DOMHelpers.filterUniqueCards(cardsRaw);
+    
+    const validCards = [];
+    rawCards.forEach(card => {
+      // Exclude breadcrumb rows or header boxes
+      if (!card.className.includes("breadcrumb") && !card.closest("header") && !card.closest("nav")) {
+        // Ensure card has a title link or heading
+        if (card.querySelector("a[href*='_BZDET'], .store-name, .resultbox_title_anchor, h2, h3, a")) {
+          validCards.push(card);
+        }
+      }
+    });
+
+    return DOMHelpers.filterUniqueCards(validCards);
   }
 
   extractLead(card, batchId, mode) {
     // Extract Business Name
-    const nameEl = card.querySelector(".store-name, .resultbox_title_anchor, [class*='title'] a, h2 a, h3 a, h2, h3");
-    let name = nameEl?.textContent?.trim() || "";
+    let name = "";
+    const nameEl = card.querySelector("a[href*='_BZDET'], .store-name, .resultbox_title_anchor, h2 a, h3 a, h2, h3");
+    if (nameEl) {
+      name = nameEl.textContent?.trim() || "";
+    }
+    
+    if (!name) {
+      const bzLink = card.querySelector("a[href*='_BZDET']");
+      if (bzLink) {
+        name = bzLink.textContent?.trim() || "";
+      }
+    }
+
     if (!name) return null;
     
     name = Normalizer.cleanBusinessName(name);
@@ -31,22 +54,28 @@ class JustdialAdapter extends BaseAdapter {
     }
 
     // Address
-    const addrEl = card.querySelector(".addresstxt, [class*='address'], .store-address");
-    const address = addrEl?.textContent?.trim() || "";
+    const addrEl = card.querySelector(".addresstxt, [class*='address'], .store-address, [class*='color777'], [class*='font12']");
+    let address = addrEl?.textContent?.trim() || "";
+
+    if (!address) {
+      const cardText = card.innerText || "";
+      const cityMatch = cardText.match(/\b(Delhi|New Delhi|Noida|Gurugram|Gurgaon|Faridabad|Ghaziabad|Mumbai|Pune|Bengaluru|Bangalore|Hyderabad|Chennai|Kolkata|Ahmedabad|Surat|Jaipur|Lucknow)\b/i);
+      if (cityMatch) address = cityMatch[0];
+    }
 
     // Category
     const catEl = card.querySelector(".resultbox_category, [class*='category']");
-    const category = catEl?.textContent?.trim() || "";
+    const category = catEl?.textContent?.trim() || document.querySelector("h1")?.textContent?.trim() || "";
 
     // Listing URL
-    const linkEl = card.querySelector("a[href*='justdial']") || card.closest("a");
+    const linkEl = card.querySelector("a[href*='_BZDET']") || card.querySelector("a[href*='justdial.com']") || card.closest("a");
     const listingUrl = linkEl?.href || window.location.href;
 
     // Contacts
     const contacts = this.extractContacts(card);
 
     let rating = null;
-    const ratingEl = card.querySelector(".resultbox_rating, .rating, [class*='rating']");
+    const ratingEl = card.querySelector(".resultbox_rating, .rating, [class*='rating'], .star-rating");
     if (ratingEl) {
       const match = ratingEl.textContent?.trim().match(/(\d+\.\d+|\d+)/);
       if (match) rating = parseFloat(match[1]);
@@ -84,7 +113,12 @@ class JustdialAdapter extends BaseAdapter {
 
     // 2. Address & Location
     const addrEl = panel.querySelector(".addresstxt, [class*='address'], .store-address, .lng_add");
-    const address = addrEl?.textContent?.trim() || "";
+    let address = addrEl?.textContent?.trim() || "";
+    if (!address) {
+      const cityMatch = panelText.match(/\b(Delhi|New Delhi|Noida|Gurugram|Gurgaon|Faridabad|Ghaziabad|Mumbai|Pune|Bengaluru|Bangalore|Hyderabad|Chennai|Kolkata|Ahmedabad|Surat|Jaipur|Lucknow)\b/i);
+      if (cityMatch) address = cityMatch[0];
+    }
+
     if (address) {
       result.address = address;
       const pinMatch = address.match(/\b([1-9][0-9]{5})\b/);

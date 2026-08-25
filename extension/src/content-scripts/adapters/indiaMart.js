@@ -11,38 +11,40 @@ class IndiaMartAdapter extends BaseAdapter {
   }
 
   findListingCards() {
-    const getListingAnchors = () => {
-      const anchors = new Set();
-      const selectors = ".gcnm, a.gcnm, .comp-name, .company-name, .supplier-name, .companyname, a[href*='/company/'], a[href*='indiamart.com/company/'], .pname, .product-title, .cl-card, .lst_spc, .mcard, .lst_Card";
-      document.querySelectorAll(selectors).forEach(el => anchors.add(el));
-      
-      const elms = document.querySelectorAll("button, a, div, span, input[type='button']");
-      elms.forEach(el => {
-        const txt = el.textContent?.trim()?.toLowerCase() || "";
-        const val = el.value?.trim()?.toLowerCase() || "";
-        if (
-          txt.includes("contact supplier") || val.includes("contact supplier") ||
-          txt.includes("contact seller") || val.includes("contact seller") ||
-          txt.includes("get best price") || val.includes("get best price") ||
-          txt.includes("send inquiry") || val.includes("send inquiry") ||
-          txt.includes("call now") || val.includes("call now") ||
-          txt.includes("get quotes") || val.includes("get quotes")
-        ) {
+    const anchors = new Set();
+    
+    // 1. Semantic card and company selectors
+    const selectors = ".staticProductInfo, .staticListingGrid, .product-card, .mcard, .lst_spc, .cl-card, .listing-card, [class*='ProductInfo'], [class*='ListingCard'], [class*='mcard'], .gcnm, a.gcnm, .comp-name, .company-name, .supplier-name, a[href*='/company/']";
+    document.querySelectorAll(selectors).forEach(el => {
+      if (!el.closest("header") && !el.closest("nav") && !el.closest("aside") && !el.closest("footer")) {
+        anchors.add(el);
+      }
+    });
+    
+    // 2. Action buttons
+    const elms = document.querySelectorAll("button, a, div, span, input[type='button']");
+    elms.forEach(el => {
+      const txt = el.textContent?.trim()?.toLowerCase() || "";
+      const val = el.value?.trim()?.toLowerCase() || "";
+      if (
+        txt.includes("contact supplier") || val.includes("contact supplier") ||
+        txt.includes("contact seller") || val.includes("contact seller") ||
+        txt.includes("get best price") || val.includes("get best price") ||
+        txt.includes("send inquiry") || val.includes("send inquiry") ||
+        txt.includes("call now") || val.includes("call now")
+      ) {
+        if (!el.closest("header") && !el.closest("nav") && !el.closest("aside") && !el.closest("footer")) {
           anchors.add(el);
         }
-      });
-      
-      return Array.from(anchors);
-    };
+      }
+    });
 
-    const anchors = getListingAnchors();
     const cardsSet = new Set();
-    
     anchors.forEach(el => {
-      let parent = el.parentElement;
+      let parent = el;
       let found = false;
       
-      for (let depth = 0; depth < 7 && parent; depth++) {
+      for (let depth = 0; depth < 8 && parent; depth++) {
         if (parent.tagName === "BODY" || parent.tagName === "HTML" || parent.id === "page-container") {
           break;
         }
@@ -51,26 +53,34 @@ class IndiaMartAdapter extends BaseAdapter {
         const classStr = typeof cls === "string" ? cls.toLowerCase() : "";
         
         if (
+          classStr.includes("staticproductinfo") ||
+          classStr.includes("staticlistinggrid") ||
           classStr.includes("card") || 
           classStr.includes("lst_spc") || 
           classStr.includes("mcard") || 
           classStr.includes("lst_card") || 
-          classStr.includes("q_cb") ||
+          classStr.includes("product") ||
           classStr.includes("item") || 
           classStr.includes("listing") ||
-          classStr.includes("widget") ||
           parent.tagName === "LI" ||
-          parent.tagName === "SECTION"
+          parent.tagName === "SECTION" ||
+          parent.tagName === "ARTICLE"
         ) {
-          cardsSet.add(parent);
-          found = true;
-          break;
+          // Avoid top level containers and headers
+          if (parent.innerText && parent.innerText.length < 1500 && parent.children.length >= 1) {
+            cardsSet.add(parent);
+            found = true;
+            break;
+          }
         }
         parent = parent.parentElement;
       }
       
       if (!found && el.parentElement && el.parentElement.parentElement) {
-        cardsSet.add(el.parentElement.parentElement.parentElement || el.parentElement.parentElement);
+        const candidate = el.parentElement.parentElement.parentElement || el.parentElement.parentElement;
+        if (!candidate.closest("header") && !candidate.closest("nav")) {
+          cardsSet.add(candidate);
+        }
       }
     });
 
@@ -79,15 +89,32 @@ class IndiaMartAdapter extends BaseAdapter {
 
   extractLead(card, batchId, mode) {
     // Extract Business Name
-    const nameSelector = ".gcnm, a.gcnm, .company-name, .supplier-name, .companyname, .comp-name, [class*='company-name']";
-    const nameEl = card.querySelector(nameSelector);
     let name = "";
+    
+    // Check known company name selectors
+    const nameSelector = ".company-name, .comp-name, .gcnm, a.gcnm, [class*='company-name'], [class*='supplier-name'], [class*='cname'], a[href*='indiamart.com/company/'], a[href*='/company/']";
+    const nameEl = card.querySelector(nameSelector);
     if (nameEl) {
       name = nameEl.textContent?.trim() || "";
-    } else {
-      const headerEl = card.querySelector("h3 a, h2 a, h3, h2");
-      if (headerEl) {
-        name = headerEl.textContent?.trim() || "";
+    }
+    
+    if (!name) {
+      // Check headings (h2, h3, h4)
+      const headings = card.querySelectorAll("h2, h3, h4, strong");
+      for (const h of headings) {
+        const text = h.textContent?.trim() || "";
+        if (text && text.length > 2 && text.length < 80 && !text.toLowerCase().includes("contact") && !text.toLowerCase().includes("price")) {
+          name = text;
+          break;
+        }
+      }
+    }
+
+    if (!name) {
+      // Fallback: check inner links for company profile links
+      const compLink = card.querySelector("a[href*='indiamart.com']:not([href*='search.mp']), a[href*='/proddetail/']");
+      if (compLink && compLink.textContent?.trim()) {
+        name = compLink.textContent.trim();
       }
     }
 
@@ -96,17 +123,30 @@ class IndiaMartAdapter extends BaseAdapter {
     name = Normalizer.cleanBusinessName(name);
 
     if (!Validator.isValidBusinessName(name)) {
-      Logger.warn(`[IndiaMartAdapter] Skipped card: invalid name "${name}"`);
-      return null;
+      // If validation fails on exact string, sanitize common prefixes like "Verified ... supplier"
+      name = name.replace(/^(verified|trusted|leading|top)\s+/i, "").trim();
+      if (!Validator.isValidBusinessName(name)) {
+        Logger.warn(`[IndiaMartAdapter] Skipped card: invalid name "${name}"`);
+        return null;
+      }
     }
 
-    // Address
-    const addrSelector = ".addDetail, .addr, .address, [class*='address'], [class*='location'], .cty-t, .clg, .loc, strong";
+    // Address & City
+    const addrSelector = ".location, .city, .addDetail, .addr, .address, [class*='location'], [class*='city'], .cty-t, [class*='addr']";
     const addrEl = card.querySelector(addrSelector);
-    const address = addrEl?.textContent?.trim() || "";
+    let address = addrEl?.textContent?.trim() || "";
+
+    if (!address) {
+      // Try to match standard Indian cities in card text
+      const cardText = card.innerText || "";
+      const cityMatch = cardText.match(/\b(Delhi|New Delhi|Noida|Gurugram|Gurgaon|Faridabad|Ghaziabad|Mumbai|Pune|Bengaluru|Bangalore|Hyderabad|Chennai|Kolkata|Ahmedabad|Surat|Jaipur|Lucknow|Kanpur|Indore|Bhopal|Chandigarh|Ludhiana|Agra|Nagpur|Vadodara|Patna|Coimbatore)\b/i);
+      if (cityMatch) {
+        address = cityMatch[0];
+      }
+    }
 
     // Listing URL
-    const linkSelector = "a[href*='indiamart.com'], a.gcnm, a[class*='company']";
+    const linkSelector = "a[href*='indiamart.com'], a[href*='/proddetail/'], a.gcnm, a[class*='company']";
     const linkEl = card.querySelector(linkSelector) || card.querySelector("a") || card.closest("a");
     const listingUrl = linkEl?.href || window.location.href;
 
@@ -140,14 +180,19 @@ class IndiaMartAdapter extends BaseAdapter {
     const panelText = panel.textContent || "";
 
     // 1. Business Name
-    const nameEl = panel.querySelector(".gcnm, .comp-name, .company-name, #company_name_div, h1, h2");
+    const nameEl = panel.querySelector(".company-name, .comp-name, .gcnm, a.gcnm, #company_name_div, h1, h2, h3");
     if (nameEl) {
       result.business_name = Normalizer.cleanBusinessName(nameEl.textContent?.trim() || "");
     }
 
     // 2. Address & Location
     const addrEl = panel.querySelector(".addDetail, .addr, .address, [class*='address'], [class*='location'], .cty-t, .loc");
-    const address = addrEl?.textContent?.trim() || "";
+    let address = addrEl?.textContent?.trim() || "";
+    if (!address) {
+      const cityMatch = panelText.match(/\b(Delhi|New Delhi|Noida|Gurugram|Gurgaon|Faridabad|Ghaziabad|Mumbai|Pune|Bengaluru|Bangalore|Hyderabad|Chennai|Kolkata|Ahmedabad|Surat|Jaipur|Lucknow)\b/i);
+      if (cityMatch) address = cityMatch[0];
+    }
+
     if (address) {
       result.address = address;
       const pinMatch = address.match(/\b([1-9][0-9]{5})\b/);
@@ -197,7 +242,7 @@ class IndiaMartAdapter extends BaseAdapter {
       result.flexible_metadata.gstin = gstMatch[0];
     }
 
-    if (panelText.includes("Verified Exporter") || panelText.includes("TrustSEAL") || panelText.includes("Verified Supplier")) {
+    if (panelText.includes("Verified Exporter") || panelText.includes("TrustSEAL") || panelText.includes("Verified Supplier") || panelText.includes("Verified")) {
       result.flexible_metadata.verified_status = "Verified Supplier";
     }
 
